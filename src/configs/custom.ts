@@ -34,6 +34,8 @@ import DijkstraTree from "../pathfinding/dijkstra-tree/DijkstraTree";
 import MixedDijkstra from "../pathfinding/mixed-dijkstra/MixedDijkstra";
 import { IShortestPathAlgorithm, IShortestPathTreeAlgorithm } from "../pathfinding/pathfinder";
 import PathfinderProvider from "../pathfinding/PathfinderProvider";
+import CSAEarliestArrival from "../planner/public-transport/CSAEarliestArrival";
+import CSAEarliestArrivalTiled from "../planner/public-transport/CSAEarliestArrivalTiled";
 import IJourneyExtractor from "../planner/public-transport/IJourneyExtractor";
 import IPublicTransportPlanner from "../planner/public-transport/IPublicTransportPlanner";
 import JourneyExtractorProfile from "../planner/public-transport/JourneyExtractorProfile";
@@ -47,8 +49,6 @@ import IQueryRunner from "../query-runner/IQueryRunner";
 import LocationResolverConvenience from "../query-runner/LocationResolverConvenience";
 import QueryRunnerDefault from "../query-runner/QueryRunnerDefault";
 import TYPES from "../types";
-import CSAEarliestArrivalTiled from "../planner/public-transport/CSAEarliestArrivalTiled";
-import CSAEarliestArrival from "../planner/public-transport/CSAEarliestArrival";
 
 const container = new Container();
 container.bind<Context>(TYPES.Context).to(Context).inSingletonScope();

@@ -1,6 +1,7 @@
 import { ArrayIterator, AsyncIterator } from "asynciterator";
 import { EventEmitter } from "events";
 import { inject, injectable, tagged } from "inversify";
+import Catalog from "../../Catalog";
 import IConnection from "../../entities/connections/connections";
 import DropOffType from "../../enums/DropOffType";
 import PickupType from "../../enums/PickupType";
@@ -9,6 +10,7 @@ import ReachableStopsSearchPhase from "../../enums/ReachableStopsSearchPhase";
 import TravelMode from "../../enums/TravelMode";
 import EventBus from "../../events/EventBus";
 import EventType from "../../events/EventType";
+import ConnectionsProviderDefault from "../../fetcher/connections/ConnectionsProviderDefault";
 import IConnectionsProvider from "../../fetcher/connections/IConnectionsProvider";
 import IStop from "../../fetcher/stops/IStop";
 import ILocation from "../../interfaces/ILocation";
@@ -26,8 +28,6 @@ import FootpathQueue from "./CSA/FootpathQueue";
 import IJourneyExtractor from "./IJourneyExtractor";
 import IPublicTransportPlanner from "./IPublicTransportPlanner";
 import JourneyExtractorEarliestArrival from "./JourneyExtractorEarliestArrival";
-import Catalog from "../../Catalog";
-import ConnectionsProviderDefault from "../../fetcher/connections/ConnectionsProviderDefault";
 
 interface IFinalReachableStops {
   [stop: string]: IReachableStop;
@@ -110,22 +110,23 @@ export default class CSAEarliestArrivalTiled implements IPublicTransportPlanner 
     } = query;
 
     // TODO Calculate tiles that are required
-    const tiles = []
+    const tiles = [];
     tiles.push(
       {
         zoom : 12,
         lat : 64,
-        lon : 1389
-      }
-    )
+        lon : 1389,
+      },
+    );
 
     // For each tile create a catalog and for each catalog a ConnectionProvider
     // const tileCatalogs = [];
     // const tileConnectionProviders = [];
     const tileIterators = [];
-    tiles.forEach(tile => {
+    tiles.forEach((tile) => {
       const tileCatalog = new Catalog();
-      let { accessUrl, travelMode } = this.catalog.connectionsSourceConfigs[0];
+      let { accessUrl } = this.catalog.connectionsSourceConfigs[0];
+      const { travelMode } = this.catalog.connectionsSourceConfigs[0];
       accessUrl = accessUrl.replace("{zoom}", tile.zoom);
       accessUrl = accessUrl.replace("{x}", tile.lat);
       accessUrl = accessUrl.replace("{y}", tile.lon);
@@ -149,7 +150,7 @@ export default class CSAEarliestArrivalTiled implements IPublicTransportPlanner 
       tileIterators,
       CSAEarliestArrivalTiled.forwardsConnectionSelector,
       true,
-    )
+    );
 
     const footpathsQueue = new FootpathQueue();
     // const connectionsIterator = this.connectionsProvider.createIterator({

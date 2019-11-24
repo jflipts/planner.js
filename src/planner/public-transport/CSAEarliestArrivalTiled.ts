@@ -28,6 +28,7 @@ import FootpathQueue from "./CSA/FootpathQueue";
 import IJourneyExtractor from "./IJourneyExtractor";
 import IPublicTransportPlanner from "./IPublicTransportPlanner";
 import JourneyExtractorEarliestArrival from "./JourneyExtractorEarliestArrival";
+import Slippy from "./tiles/Slippy";
 
 interface IFinalReachableStops {
   [stop: string]: IReachableStop;
@@ -110,12 +111,93 @@ export default class CSAEarliestArrivalTiled implements IPublicTransportPlanner 
     } = query;
 
     // TODO Calculate tiles that are required
+    const fromLocation: ILocation = query.from[0];
+    const toLocation: ILocation = query.to[0];
+
+    const zoomlevel = 12;
     const tiles = [];
+    const startTile = {
+      zoom : zoomlevel,
+      x : Slippy.lonToTile(fromLocation.longitude, zoomlevel),
+      y : Slippy.latToTile(fromLocation.latitude, zoomlevel),
+    };
+
+    const endTile = {
+      zoom : zoomlevel,
+      x : Slippy.lonToTile(toLocation.longitude, zoomlevel),
+      y : Slippy.latToTile(toLocation.latitude, zoomlevel),
+    };
+
+    let currentTile = startTile;
+
+    const tilesToFetch = new Map([[JSON.stringify(startTile), startTile]]);
+    while (JSON.stringify(currentTile) !== JSON.stringify(endTile)) {
+      const rightTile  =  {zoom: currentTile.zoom, x: currentTile.x + 1, y: currentTile.y};
+      const leftTile   =  {zoom: currentTile.zoom, x: currentTile.x - 1, y: currentTile.y};
+      const aboveTile  =  {zoom: currentTile.zoom, x: currentTile.x, y: currentTile.y - 1};
+      const belowTile  =  {zoom: currentTile.zoom, x: currentTile.x, y: currentTile.y + 1};
+
+      const neighbours = [rightTile, leftTile, aboveTile, belowTile];
+
+      function intersects(tile: {x, y, zoom}, line: {x1, y1, x2, y2}): boolean {
+        const bbox = Slippy.getBBox(tile.x, tile.y, tile.zoom);
+
+        let above = 0;
+        bbox.forEach((element) => {
+          const f = (line.y2 - line.y1) * element.longitude
+          + (line.x1 - line.x2) * element.latitude
+          + (line.x2 * line.y1 - line.x1 * line.y2);
+          if (f === 0) {
+            return true;
+          } else if (f > 0) {
+            above += 1;
+          } else {
+            above -= 1;
+          }
+        });
+
+        if (above === 4 || above === -4) {
+          return false;
+        } else {
+          const BL = bbox[1];
+          const TR = bbox[2];
+
+          if (
+            (line.x1 > TR.longitude && line.x2 > TR.longitude) ||
+            (line.x1 < BL.longitude && line.x2 < BL.longitude) ||
+            (line.y1 > TR.latitude && line.y2 > TR.latitude) ||
+            (line.y1 < BL.latitude && line.y2 < BL.latitude)
+          ) {
+            return false;
+          }
+        }
+        return true;
+      }
+
+      const line = {
+        x1: fromLocation.longitude,
+        y1: fromLocation.latitude,
+        x2: toLocation.longitude,
+        y2: toLocation.latitude,
+      };
+
+      neighbours.forEach((neighbour) => {
+        if (intersects(neighbour, line)) {
+          if (!tilesToFetch.has(JSON.stringify(neighbour))) {
+            tilesToFetch.set(JSON.stringify(neighbour), neighbour);
+            currentTile = neighbour;
+          }
+        }
+      });
+    }
+
+    // TODO Get summary of the available tiles
+
     tiles.push(
       {
         zoom : 12,
-        lat : 64,
-        lon : 1389,
+        x : 64,
+        y : 1389,
       },
     );
 
@@ -128,8 +210,8 @@ export default class CSAEarliestArrivalTiled implements IPublicTransportPlanner 
       let { accessUrl } = this.catalog.connectionsSourceConfigs[0];
       const { travelMode } = this.catalog.connectionsSourceConfigs[0];
       accessUrl = accessUrl.replace("{zoom}", tile.zoom);
-      accessUrl = accessUrl.replace("{x}", tile.lat);
-      accessUrl = accessUrl.replace("{y}", tile.lon);
+      accessUrl = accessUrl.replace("{x}", tile.x);
+      accessUrl = accessUrl.replace("{y}", tile.y);
       tileCatalog.addConnectionsSource(accessUrl, travelMode);
 
       // tileCatalogs.push(tileCatalog);

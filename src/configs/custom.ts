@@ -114,8 +114,10 @@ container.bind<interfaces.Factory<IStopsFetcher>>(TYPES.StopsFetcherFactory)
   );
 
 // Dynamic binding of available tiles fetchers. Tiles/pages themself are fetched trough ConnectionFetchers
-container.bind<IPublicTransportTilesProvider>(TYPES.PublicTransportTilesProvider).to(AvailablePublicTransportTilesProvider).inSingletonScope();
-container.bind<IPublicTransportTilesFetcher>(TYPES.PublicTransportTilesFetcher).to(AvailablePublicTransportTilesFetcher);
+container.bind<IPublicTransportTilesProvider>(TYPES.PublicTransportTilesProvider)
+  .to(AvailablePublicTransportTilesProvider).inSingletonScope();
+container.bind<IPublicTransportTilesFetcher>(TYPES.PublicTransportTilesFetcher)
+  .to(AvailablePublicTransportTilesFetcher);
 container.bind<interfaces.Factory<IPublicTransportTilesFetcher>>(TYPES.PublicTransportTilesFetcherFactory)
   .toFactory<IPublicTransportTilesFetcher>(
     (context: interfaces.Context) =>

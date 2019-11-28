@@ -17,9 +17,6 @@ export default class AvailablePublicTransportTilesFetcher implements IPublicTran
     private loadPromise: Promise<any>;
     private tiles: IPublicTransportTileMap;
 
-    constructor() {
-    }
-
     public setAccessUrl(accessUrl: string) {
         this.accessUrl = accessUrl;
     }
@@ -83,11 +80,11 @@ export default class AvailablePublicTransportTilesFetcher implements IPublicTran
                 const latitudeTile = entity["tiles:latitudeTile"];
 
                 const tile: IPublicTransportTile = {
-                    id: id,
-                    zoom: zoom,
+                    id,
+                    zoom,
                     x: longitudeTile,
                     y: latitudeTile,
-                }
+                };
                 tiles[id] = tile;
             }
         }

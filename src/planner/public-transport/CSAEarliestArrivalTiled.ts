@@ -12,7 +12,7 @@ import EventBus from "../../events/EventBus";
 import EventType from "../../events/EventType";
 import ConnectionsProviderDefault from "../../fetcher/connections/ConnectionsProviderDefault";
 import IConnectionsProvider from "../../fetcher/connections/IConnectionsProvider";
-import IPublicTransportTile from "../../fetcher/publictransporttiles/IPublicTransportTile"
+import IPublicTransportTile from "../../fetcher/publictransporttiles/IPublicTransportTile";
 import IPublicTransportTilesProvider from "../../fetcher/publictransporttiles/IPublicTransportTilesProvider";
 import IStop from "../../fetcher/stops/IStop";
 import ILocation from "../../interfaces/ILocation";
@@ -209,7 +209,7 @@ export default class CSAEarliestArrivalTiled implements IPublicTransportPlanner 
     const tilesToFetch = new Set();
 
     // Tiles may not actually exist -> filter these
-    for (var value of tileCandidates.values()) {
+    for (const value of tileCandidates.values()) {
       // Hardcoded on first connectionsource
       let { accessUrl } = this.catalog.connectionsSourceConfigs[0];
       accessUrl = accessUrl.replace("{zoom}", value.zoom.toString());
@@ -218,7 +218,7 @@ export default class CSAEarliestArrivalTiled implements IPublicTransportPlanner 
 
       // TODO: Very inefficient for the moment as the thread blocks for every tile -> Barrier needed
       const tile = await this.availablePublicTransportTilesProvider.getPublicTransportTileById(accessUrl);
-      if(tile) {
+      if (tile) {
         tilesToFetch.add(tile);
       }
     }
@@ -235,7 +235,7 @@ export default class CSAEarliestArrivalTiled implements IPublicTransportPlanner 
     // const tileCatalogs = [];
     // const tileConnectionProviders = [];
     const tileIterators = [];
-    tilesToFetch.forEach((value: IPublicTransportTile,_1,_2) => {
+    tilesToFetch.forEach((value: IPublicTransportTile, _1, _2) => {
       const tileCatalog = new Catalog();
       let { accessUrl } = this.catalog.connectionsSourceConfigs[0];
       const { travelMode } = this.catalog.connectionsSourceConfigs[0];

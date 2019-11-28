@@ -1,8 +1,8 @@
 import TravelMode from "./enums/TravelMode";
 import IConnectionsFetcher from "./fetcher/connections/IConnectionsFetcher";
+import IPublicTransportTilesFetcher from "./fetcher/publictransporttiles/IPublicTransportTilesProvider";
 import IStopsFetcher from "./fetcher/stops/IStopsFetcher";
 import IRoutableTileFetcher from "./fetcher/tiles/IRoutableTileFetcher";
-import IPublicTransportTilesFetcher from "./fetcher/publictransporttiles/IPublicTransportTilesProvider";
 
 const TYPES = {
   EventBus: Symbol("EventBus"),

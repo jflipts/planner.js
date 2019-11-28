@@ -13,6 +13,7 @@ export default class Catalog {
     for (const sourceCatalog of catalogs) {
       combinedCatalog.stopsSourceConfigs.push(...sourceCatalog.stopsSourceConfigs);
       combinedCatalog.connectionsSourceConfigs.push(...sourceCatalog.connectionsSourceConfigs);
+      combinedCatalog.availablePublicTransportTilesConfigs.push(...sourceCatalog.availablePublicTransportTilesConfigs);
     }
 
     return combinedCatalog;
@@ -20,6 +21,7 @@ export default class Catalog {
 
   public stopsSourceConfigs: IStopsSourceConfig[] = [];
   public connectionsSourceConfigs: IConnectionsSourceConfig[] = [];
+  public availablePublicTransportTilesConfigs: IAvailablePublicTransportTilesConfig[] = [];
 
   public addStopsSource(accessUrl: string) {
     this.stopsSourceConfigs.push({accessUrl});
@@ -27,6 +29,10 @@ export default class Catalog {
 
   public addConnectionsSource(accessUrl: string, travelMode: TravelMode) {
     this.connectionsSourceConfigs.push({accessUrl, travelMode});
+  }
+
+  public addAvailablePublicTransportTilesSource(accessUrl: string) {
+    this.availablePublicTransportTilesConfigs.push({accessUrl});
   }
 }
 
@@ -37,4 +43,8 @@ export interface IStopsSourceConfig {
 export interface IConnectionsSourceConfig {
   accessUrl: string;
   travelMode: TravelMode;
+}
+
+export interface IAvailablePublicTransportTilesConfig {
+  accessUrl: string;
 }

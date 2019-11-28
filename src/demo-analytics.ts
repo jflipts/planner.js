@@ -90,9 +90,25 @@ export default async (logResults) => {
             // from: "https://data.nmbs.be/stops/8894755",
             // to: "https://data.nmbs.be/stops/8894748",
 
-            // query in tile 12/64/1389
-            from: "http://irail.be/stations/NMBS/008865110",
-            to: "http://irail.be/stations/NMBS/008865128",
+            // Case: 1 connection; start and end inside same tile (12/64/1389)
+            // from: "http://irail.be/stations/NMBS/008865110",
+            // to: "http://irail.be/stations/NMBS/008865128",
+
+            // Case: 1 connection; start and end tile with 2 nonexisting tiles in between
+            // from: "Brugge", // (12/2084/1367)
+            // to: "http://irail.be/stations/NMBS/008891702", // Oostende (12/2081/1367)
+
+            // Case: 1 connection; 3 adjacent tiles
+            // from: "Brugge", // (12/2084/1367)
+            // to: "Oostkamp", // (12/2085/1368)
+
+            // Case: 1 or 2 connections; lot of adjacent tiles that are not needed
+            // from: "Brugge",
+            // to: "http://irail.be/stations/NMBS/008892007", // Ghent-Sint-Pieters
+
+            // Case: 5 or 6 connections; not on a straight line so correct tiles are not fetched
+            from: "Brugge",
+            to: "Leuven",
 
             minimumDepartureTime: new Date(),
             maximumTransferDuration: Units.fromMinutes(30),

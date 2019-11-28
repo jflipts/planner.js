@@ -12,6 +12,8 @@ import EventBus from "../../events/EventBus";
 import EventType from "../../events/EventType";
 import ConnectionsProviderDefault from "../../fetcher/connections/ConnectionsProviderDefault";
 import IConnectionsProvider from "../../fetcher/connections/IConnectionsProvider";
+import IPublicTransportTile from "../../fetcher/publictransporttiles/IPublicTransportTile"
+import IPublicTransportTilesProvider from "../../fetcher/publictransporttiles/IPublicTransportTilesProvider";
 import IStop from "../../fetcher/stops/IStop";
 import ILocation from "../../interfaces/ILocation";
 import IPath from "../../interfaces/IPath";
@@ -73,6 +75,7 @@ export default class CSAEarliestArrivalTiled implements IPublicTransportPlanner 
   protected readonly catalog: Catalog;
   protected readonly connectionsFetcherFactory;
   protected readonly eventBus: EventEmitter;
+  protected readonly availablePublicTransportTilesProvider: IPublicTransportTilesProvider;
 
   protected journeyExtractor: IJourneyExtractor;
 
@@ -92,6 +95,8 @@ export default class CSAEarliestArrivalTiled implements IPublicTransportPlanner 
     finalReachableStopsFinder: IReachableStopsFinder,
     @inject(TYPES.Catalog) catalog: Catalog,
     @inject(TYPES.ConnectionsFetcherFactory) connectionsFetcherFactory: ConnectionsFetcherFactory,
+    @inject(TYPES.PublicTransportTilesProvider)
+    availablePublicTransportTilesProvider: IPublicTransportTilesProvider,
   ) {
     this.connectionsProvider = connectionsProvider;
     this.locationResolver = locationResolver;
@@ -102,6 +107,7 @@ export default class CSAEarliestArrivalTiled implements IPublicTransportPlanner 
     this.connectionsFetcherFactory = connectionsFetcherFactory;
     this.eventBus = EventBus.getInstance();
     this.journeyExtractor = new JourneyExtractorEarliestArrival(locationResolver);
+    this.availablePublicTransportTilesProvider = availablePublicTransportTilesProvider;
   }
 
   public async plan(query: IResolvedQuery): Promise<AsyncIterator<IPath>> {
@@ -110,12 +116,19 @@ export default class CSAEarliestArrivalTiled implements IPublicTransportPlanner 
       maximumArrivalTime: upperBoundDate,
     } = query;
 
-    // TODO Calculate tiles that are required
+    // Set the source for available tiles
+    // This is currently hardcoded on first source and in the wrong place
+    // const pathToAvailableTiles = this.catalog.availablePublicTransportTilesConfigs[0].accessUrl;
+    // this.availablePublicTransportTilesFetcher.setAccessUrl(pathToAvailableTiles);
+    this.availablePublicTransportTilesProvider.prefetchAvailableTiles();
+
+    // Should become catalog variable
+    const zoomlevel = 12;
+
     const fromLocation: ILocation = query.from[0];
     const toLocation: ILocation = query.to[0];
 
-    const zoomlevel = 12;
-    const tiles = [];
+    // Known bug: starttile or endtile are not available -> should calculate nearest tile (only edge case)
     const startTile = {
       zoom : zoomlevel,
       x : Slippy.lonToTile(fromLocation.longitude, zoomlevel),
@@ -128,9 +141,10 @@ export default class CSAEarliestArrivalTiled implements IPublicTransportPlanner 
       y : Slippy.latToTile(toLocation.latitude, zoomlevel),
     };
 
-    let currentTile = startTile;
+    // Keep track of all the tiles that will need to be fetched
+    const tileCandidates = new Map([[JSON.stringify(startTile), startTile]]);
 
-    const tilesToFetch = new Map([[JSON.stringify(startTile), startTile]]);
+    let currentTile = startTile;
     while (JSON.stringify(currentTile) !== JSON.stringify(endTile)) {
       const rightTile  =  {zoom: currentTile.zoom, x: currentTile.x + 1, y: currentTile.y};
       const leftTile   =  {zoom: currentTile.zoom, x: currentTile.x - 1, y: currentTile.y};
@@ -139,6 +153,7 @@ export default class CSAEarliestArrivalTiled implements IPublicTransportPlanner 
 
       const neighbours = [rightTile, leftTile, aboveTile, belowTile];
 
+      // AABB - line segment intersection test
       function intersects(tile: {x, y, zoom}, line: {x1, y1, x2, y2}): boolean {
         const bbox = Slippy.getBBox(tile.x, tile.y, tile.zoom);
 
@@ -183,35 +198,50 @@ export default class CSAEarliestArrivalTiled implements IPublicTransportPlanner 
 
       neighbours.forEach((neighbour) => {
         if (intersects(neighbour, line)) {
-          if (!tilesToFetch.has(JSON.stringify(neighbour))) {
-            tilesToFetch.set(JSON.stringify(neighbour), neighbour);
+          if (!tileCandidates.has(JSON.stringify(neighbour))) {
+            tileCandidates.set(JSON.stringify(neighbour), neighbour);
             currentTile = neighbour;
           }
         }
       });
     }
 
-    // TODO Get summary of the available tiles
+    const tilesToFetch = new Set();
 
-    tiles.push(
-      {
-        zoom : 12,
-        x : 64,
-        y : 1389,
-      },
-    );
+    // Tiles may not actually exist -> filter these
+    for (var value of tileCandidates.values()) {
+      // Hardcoded on first connectionsource
+      let { accessUrl } = this.catalog.connectionsSourceConfigs[0];
+      accessUrl = accessUrl.replace("{zoom}", value.zoom.toString());
+      accessUrl = accessUrl.replace("{x}", value.x.toString());
+      accessUrl = accessUrl.replace("{y}", value.y.toString());
+
+      // TODO: Very inefficient for the moment as the thread blocks for every tile -> Barrier needed
+      const tile = await this.availablePublicTransportTilesProvider.getPublicTransportTileById(accessUrl);
+      if(tile) {
+        tilesToFetch.add(tile);
+      }
+    }
+
+    // tiles.push(
+    //   {
+    //     zoom : 12,
+    //     x : 64,
+    //     y : 1389,
+    //   },
+    // );
 
     // For each tile create a catalog and for each catalog a ConnectionProvider
     // const tileCatalogs = [];
     // const tileConnectionProviders = [];
     const tileIterators = [];
-    tiles.forEach((tile) => {
+    tilesToFetch.forEach((value: IPublicTransportTile,_1,_2) => {
       const tileCatalog = new Catalog();
       let { accessUrl } = this.catalog.connectionsSourceConfigs[0];
       const { travelMode } = this.catalog.connectionsSourceConfigs[0];
-      accessUrl = accessUrl.replace("{zoom}", tile.zoom);
-      accessUrl = accessUrl.replace("{x}", tile.x);
-      accessUrl = accessUrl.replace("{y}", tile.y);
+      accessUrl = accessUrl.replace("{zoom}", value.zoom.toString());
+      accessUrl = accessUrl.replace("{x}", value.x.toString());
+      accessUrl = accessUrl.replace("{y}", value.y.toString());
       tileCatalog.addConnectionsSource(accessUrl, travelMode);
 
       // tileCatalogs.push(tileCatalog);

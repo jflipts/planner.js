@@ -2,6 +2,7 @@ import TravelMode from "./enums/TravelMode";
 import IConnectionsFetcher from "./fetcher/connections/IConnectionsFetcher";
 import IStopsFetcher from "./fetcher/stops/IStopsFetcher";
 import IRoutableTileFetcher from "./fetcher/tiles/IRoutableTileFetcher";
+import IPublicTransportTilesFetcher from "./fetcher/publictransporttiles/IPublicTransportTilesProvider";
 
 const TYPES = {
   EventBus: Symbol("EventBus"),
@@ -16,6 +17,10 @@ const TYPES = {
   StopsProvider: Symbol("StopsProvider"),
   StopsFetcher: Symbol("StopsFetcher"),
   StopsFetcherFactory: Symbol("StopsFetcherFactory"),
+
+  PublicTransportTilesProvider: Symbol("PublicTransportTilesProvider"),
+  PublicTransportTilesFetcher: Symbol("PublicTransportTilesFetcher"),
+  PublicTransportTilesFetcherFactory: Symbol("PublicTransportTilesFetcherFactory"),
 
   RoutableTileProvider: Symbol("TileProvider"),
   RoutableTileFetcher: Symbol("TileFetcher"),
@@ -45,3 +50,4 @@ export default TYPES;
 
 export type StopsFetcherFactory = (accessUrl: string) => IStopsFetcher;
 export type ConnectionsFetcherFactory = (travelMode: TravelMode) => IConnectionsFetcher;
+export type PublicTransportTilesFetcherFactory = (accessUrl: string) => IPublicTransportTilesFetcher;

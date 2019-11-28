@@ -19,6 +19,10 @@ import IProfileFetcher from "../fetcher/profiles/IProfileFetcher";
 import IProfileProvider from "../fetcher/profiles/IProfileProvider";
 import ProfileFetcherDefault from "../fetcher/profiles/ProfileFetcherDefault";
 import ProfileProviderDefault from "../fetcher/profiles/ProfileProviderDefault";
+import AvailablePublicTransportTilesFetcher from "../fetcher/publictransporttiles/AvailablePublicTransportTilesFetcher";
+import AvailablePublicTransportTilesProvider from "../fetcher/publictransporttiles/AvailablePublicTransportTilesProvider";
+import IPublicTransportTilesFetcher from "../fetcher/publictransporttiles/IPublicTransportTilesFetcher";
+import IPublicTransportTilesProvider from "../fetcher/publictransporttiles/IPublicTransportTilesProvider";
 import IStopsFetcher from "../fetcher/stops/IStopsFetcher";
 import IStopsProvider from "../fetcher/stops/IStopsProvider";
 import StopsFetcherRaw from "../fetcher/stops/StopsFetcherRaw";
@@ -104,6 +108,19 @@ container.bind<interfaces.Factory<IStopsFetcher>>(TYPES.StopsFetcherFactory)
     (context: interfaces.Context) =>
       (accessUrl: string) => {
         const fetcher = context.container.get<StopsFetcherRaw>(TYPES.StopsFetcher);
+        fetcher.setAccessUrl(accessUrl);
+        return fetcher;
+      },
+  );
+
+// Dynamic binding of available tiles fetchers. Tiles/pages themself are fetched trough ConnectionFetchers
+container.bind<IPublicTransportTilesProvider>(TYPES.PublicTransportTilesProvider).to(AvailablePublicTransportTilesProvider).inSingletonScope();
+container.bind<IPublicTransportTilesFetcher>(TYPES.PublicTransportTilesFetcher).to(AvailablePublicTransportTilesFetcher);
+container.bind<interfaces.Factory<IPublicTransportTilesFetcher>>(TYPES.PublicTransportTilesFetcherFactory)
+  .toFactory<IPublicTransportTilesFetcher>(
+    (context: interfaces.Context) =>
+      (accessUrl: string) => {
+        const fetcher = context.container.get<AvailablePublicTransportTilesFetcher>(TYPES.PublicTransportTilesFetcher);
         fetcher.setAccessUrl(accessUrl);
         return fetcher;
       },

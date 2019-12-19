@@ -30,7 +30,13 @@ import FootpathQueue from "./CSA/FootpathQueue";
 import IJourneyExtractor from "./IJourneyExtractor";
 import IPublicTransportPlanner from "./IPublicTransportPlanner";
 import JourneyExtractorEarliestArrival from "./JourneyExtractorEarliestArrival";
-import Slippy from "./tiles/Slippy";
+import TileFetchStrategyLineIterator from "./tiles/TileFetchStrategyLineIterator";
+
+import FilterUniqueIterator from "../../util/iterators/FilterUniqueIterator";
+import FlatMapIterator from "../../util/iterators/FlatMapIterator";
+import Path from "../Path";
+
+import { PromiseProxyIterator } from "asynciterator-promiseproxy";
 
 interface IFinalReachableStops {
   [stop: string]: IReachableStop;
@@ -42,6 +48,10 @@ interface IQueryState {
   enterConnectionByTrip: IEnterConnectionByTrip; // T
   footpathsQueue: FootpathQueue;
   connectionsQueue: AsyncIterator<IConnection>;
+}
+
+interface IResolvedQueryTiled extends IResolvedQuery {
+  tilesToFetch: Set<IPublicTransportTile>;
 }
 
 // Implementation is as close as possible to the original paper: https://arxiv.org/pdf/1703.05997.pdf
@@ -78,6 +88,7 @@ export default class CSAEarliestArrivalTiled implements IPublicTransportPlanner 
   protected readonly availablePublicTransportTilesProvider: IPublicTransportTilesProvider;
 
   protected journeyExtractor: IJourneyExtractor;
+  private tilesToFetchIterator: AsyncIterator<Set<IPublicTransportTile>>;
 
   constructor(
     @inject(TYPES.ConnectionsProvider)
@@ -111,188 +122,26 @@ export default class CSAEarliestArrivalTiled implements IPublicTransportPlanner 
   }
 
   public async plan(query: IResolvedQuery): Promise<AsyncIterator<IPath>> {
-    const {
-      minimumDepartureTime: lowerBoundDate,
-      maximumArrivalTime: upperBoundDate,
-    } = query;
+    // This is hardcoded and should be injected trough a factory
+    this.tilesToFetchIterator = new TileFetchStrategyLineIterator(
+      this.availablePublicTransportTilesProvider, query);
 
-    // Set the source for available tiles
-    // This is currently hardcoded on first source and in the wrong place
-    // const pathToAvailableTiles = this.catalog.availablePublicTransportTilesConfigs[0].accessUrl;
-    // this.availablePublicTransportTilesFetcher.setAccessUrl(pathToAvailableTiles);
-    this.availablePublicTransportTilesProvider.prefetchAvailableTiles();
+    //   const subqueryIterator = new FlatMapIterator<Promise<Set<IPublicTransportTile>>, IPath>(
+    //     tilesToFetchIterator,
+    //     this.runSubquery.bind(this),
+    //   );
 
-    // Should become catalog variable
-    const zoomlevel = 12;
+    //   return new FilterUniqueIterator<IPath>(subqueryIterator, Path.compareEquals);
+    // }
 
-    const fromLocation: ILocation = query.from[0];
-    const toLocation: ILocation = query.to[0];
+    // private runSubquery(query: IResolvedQuery): AsyncIterator<IPath> {
+    //   // TODO investigate if publicTransportPlanner can be reused or reuse some of its aggregated data
+    //   this.eventBus.emit(EventType.SubQuery, query);
 
-    // Known bug: starttile or endtile are not available -> should calculate nearest tile (only edge case)
-    const startTile = {
-      zoom : zoomlevel,
-      x : Slippy.lonToTile(fromLocation.longitude, zoomlevel),
-      y : Slippy.latToTile(fromLocation.latitude, zoomlevel),
-    };
+    //   const queryCopy = Object.assign({}, query);
 
-    const endTile = {
-      zoom : zoomlevel,
-      x : Slippy.lonToTile(toLocation.longitude, zoomlevel),
-      y : Slippy.latToTile(toLocation.latitude, zoomlevel),
-    };
-
-    // Keep track of all the tiles that will need to be fetched
-    const tileCandidates = new Map([[JSON.stringify(startTile), startTile]]);
-
-    let currentTile = startTile;
-    while (JSON.stringify(currentTile) !== JSON.stringify(endTile)) {
-      const rightTile  =  {zoom: currentTile.zoom, x: currentTile.x + 1, y: currentTile.y};
-      const leftTile   =  {zoom: currentTile.zoom, x: currentTile.x - 1, y: currentTile.y};
-      const aboveTile  =  {zoom: currentTile.zoom, x: currentTile.x, y: currentTile.y - 1};
-      const belowTile  =  {zoom: currentTile.zoom, x: currentTile.x, y: currentTile.y + 1};
-
-      const neighbours = [rightTile, leftTile, aboveTile, belowTile];
-
-      // AABB - line segment intersection test
-      function intersects(tile: {x, y, zoom}, line: {x1, y1, x2, y2}): boolean {
-        const bbox = Slippy.getBBox(tile.x, tile.y, tile.zoom);
-
-        let above = 0;
-        bbox.forEach((element) => {
-          const f = (line.y2 - line.y1) * element.longitude
-          + (line.x1 - line.x2) * element.latitude
-          + (line.x2 * line.y1 - line.x1 * line.y2);
-          if (f === 0) {
-            return true;
-          } else if (f > 0) {
-            above += 1;
-          } else {
-            above -= 1;
-          }
-        });
-
-        if (above === 4 || above === -4) {
-          return false;
-        } else {
-          const BL = bbox[1];
-          const TR = bbox[2];
-
-          if (
-            (line.x1 > TR.longitude && line.x2 > TR.longitude) ||
-            (line.x1 < BL.longitude && line.x2 < BL.longitude) ||
-            (line.y1 > TR.latitude && line.y2 > TR.latitude) ||
-            (line.y1 < BL.latitude && line.y2 < BL.latitude)
-          ) {
-            return false;
-          }
-        }
-        return true;
-      }
-
-      const line = {
-        x1: fromLocation.longitude,
-        y1: fromLocation.latitude,
-        x2: toLocation.longitude,
-        y2: toLocation.latitude,
-      };
-
-      neighbours.forEach((neighbour) => {
-        if (intersects(neighbour, line)) {
-          if (!tileCandidates.has(JSON.stringify(neighbour))) {
-            tileCandidates.set(JSON.stringify(neighbour), neighbour);
-            currentTile = neighbour;
-          }
-        }
-      });
-    }
-
-    const tilesToFetch = new Set();
-
-    // Tiles may not actually exist -> filter these
-    for (const value of tileCandidates.values()) {
-      // Hardcoded on first connectionsource
-      let { accessUrl } = this.catalog.connectionsSourceConfigs[0];
-      accessUrl = accessUrl.replace("{zoom}", value.zoom.toString());
-      accessUrl = accessUrl.replace("{x}", value.x.toString());
-      accessUrl = accessUrl.replace("{y}", value.y.toString());
-
-      // TODO: Very inefficient for the moment as the thread blocks for every tile -> Barrier needed
-      const tile = await this.availablePublicTransportTilesProvider.getPublicTransportTileById(accessUrl);
-      if (tile) {
-        tilesToFetch.add(tile);
-      }
-    }
-
-    // tiles.push(
-    //   {
-    //     zoom : 12,
-    //     x : 64,
-    //     y : 1389,
-    //   },
-    // );
-
-    // For each tile create a catalog and for each catalog a ConnectionProvider
-    // const tileCatalogs = [];
-    // const tileConnectionProviders = [];
-    const tileIterators = [];
-    tilesToFetch.forEach((value: IPublicTransportTile, _1, _2) => {
-      const tileCatalog = new Catalog();
-      let { accessUrl } = this.catalog.connectionsSourceConfigs[0];
-      const { travelMode } = this.catalog.connectionsSourceConfigs[0];
-      accessUrl = accessUrl.replace("{zoom}", value.zoom.toString());
-      accessUrl = accessUrl.replace("{x}", value.x.toString());
-      accessUrl = accessUrl.replace("{y}", value.y.toString());
-      tileCatalog.addConnectionsSource(accessUrl, travelMode);
-
-      // tileCatalogs.push(tileCatalog);
-      // tileConnectionProviders.push(new ConnectionsProviderDefault(this.connectionsFetcherFactory, tileCatalog));
-
-      const connectionProvider = new ConnectionsProviderDefault(this.connectionsFetcherFactory, tileCatalog);
-
-      const tileIterator = connectionProvider.createIterator({
-        upperBoundDate,
-        lowerBoundDate,
-        excludedModes: query.excludedTravelModes,
-      });
-      tileIterators.push(tileIterator);
-    });
-
-    // Create a MergeIterator over all the tiles
-    const connectionsIterator = new MergeIterator(
-      tileIterators,
-      CSAEarliestArrivalTiled.forwardsConnectionSelector,
-      true,
-    );
-
-    const footpathsQueue = new FootpathQueue();
-    // const connectionsIterator = this.connectionsProvider.createIterator({
-    //   upperBoundDate,
-    //   lowerBoundDate,
-    //   excludedModes: query.excludedTravelModes,
-    // });
-
-    const connectionsQueue = new MergeIterator(
-      [connectionsIterator, footpathsQueue],
-      CSAEarliestArrivalTiled.forwardsConnectionSelector,
-      true,
-    );
-
-    const queryState: IQueryState = {
-      finalReachableStops: {},
-      profilesByStop: {},
-      enterConnectionByTrip: {},
-      footpathsQueue,
-      connectionsQueue,
-    };
-
-    const [hasInitialReachableStops, hasFinalReachableStops] = await Promise.all([
-      this.initInitialReachableStops(queryState, query),
-      this.initFinalReachableStops(queryState, query),
-    ]);
-
-    if (!hasInitialReachableStops || !hasFinalReachableStops) {
-      return Promise.resolve(new ArrayIterator([]));
-    }
+    //   return new PromiseProxyIterator(() => this.runPlanner(queryCopy));
+    // }
 
     const self = this;
     return new Promise((resolve, reject) => {
@@ -300,27 +149,117 @@ export default class CSAEarliestArrivalTiled implements IPublicTransportPlanner 
 
       const done = () => {
         if (!isDone) {
-          connectionsQueue.close();
-
-          self.extractJourneys(queryState, query)
-            .then((resultIterator) => {
-              resolve(resultIterator);
-            });
+          self.tilesToFetchIterator.close();
 
           isDone = true;
         }
       };
 
-      connectionsIterator.on("readable", () =>
-        self.processConnections(queryState, query, done),
+      self.tilesToFetchIterator.on("readable", () =>
+        self.runPlanner(query, done).then((resultIterator) => {
+          resolve(resultIterator);
+        }),
       );
 
-      connectionsIterator.on("end", () => done());
+      self.tilesToFetchIterator.on("end", () => done());
 
       // iterator may have become readable before the listener was attached
-      self.processConnections(queryState, query, done);
+      self.runPlanner(query, done);
 
     }) as Promise<AsyncIterator<IPath>>;
+  }
+
+  protected async runPlanner(query: IResolvedQuery, resolvePlanner: () => void): Promise<AsyncIterator<IPath>> {
+    const {
+      minimumDepartureTime: lowerBoundDate,
+      maximumArrivalTime: upperBoundDate,
+    } = query;
+
+    const tilesToFetch: Set<IPublicTransportTile> = this.tilesToFetchIterator.read();
+
+    if (tilesToFetch && !this.tilesToFetchIterator.closed) {
+
+      // For each tile create a catalog and for each catalog a ConnectionProvider
+      const tileIterators = [];
+      tilesToFetch.forEach((value: IPublicTransportTile, _1, _2) => {
+        const tileCatalog = new Catalog();
+        let { accessUrl } = this.catalog.connectionsSourceConfigs[0];
+        const { travelMode } = this.catalog.connectionsSourceConfigs[0];
+        accessUrl = accessUrl.replace("{zoom}", value.zoom.toString());
+        accessUrl = accessUrl.replace("{x}", value.x.toString());
+        accessUrl = accessUrl.replace("{y}", value.y.toString());
+        tileCatalog.addConnectionsSource(accessUrl, travelMode);
+
+        const connectionProvider = new ConnectionsProviderDefault(this.connectionsFetcherFactory, tileCatalog);
+
+        const tileIterator = connectionProvider.createIterator({
+          upperBoundDate,
+          lowerBoundDate,
+          excludedModes: query.excludedTravelModes,
+        });
+        tileIterators.push(tileIterator);
+      });
+
+      // Create a MergeIterator over all the tiles
+      const connectionsIterator = new MergeIterator(
+        tileIterators,
+        CSAEarliestArrivalTiled.forwardsConnectionSelector,
+        true,
+      );
+
+      const footpathsQueue = new FootpathQueue();
+
+      const connectionsQueue = new MergeIterator(
+        [connectionsIterator, footpathsQueue],
+        CSAEarliestArrivalTiled.forwardsConnectionSelector,
+        true,
+      );
+
+      const queryState: IQueryState = {
+        finalReachableStops: {},
+        profilesByStop: {},
+        enterConnectionByTrip: {},
+        footpathsQueue,
+        connectionsQueue,
+      };
+
+      const [hasInitialReachableStops, hasFinalReachableStops] = await Promise.all([
+        this.initInitialReachableStops(queryState, query),
+        this.initFinalReachableStops(queryState, query),
+      ]);
+
+      if (!hasInitialReachableStops || !hasFinalReachableStops) {
+        return Promise.resolve(new ArrayIterator([]));
+      }
+
+      const self = this;
+      return new Promise((resolve, reject) => {
+        let isDone: boolean = false;
+
+        const done = () => {
+          if (!isDone) {
+            connectionsQueue.close();
+
+            self.extractJourneys(queryState, query)
+              .then((resultIterator) => {
+                resolve(resultIterator);
+              });
+
+            isDone = true;
+          }
+        };
+
+        connectionsIterator.on("readable", () =>
+          self.processConnections(queryState, query, done),
+        );
+
+        connectionsIterator.on("end", () => done());
+
+        // iterator may have become readable before the listener was attached
+        self.processConnections(queryState, query, done);
+
+      }) as Promise<AsyncIterator<IPath>>;
+    }
   }
 
   protected updateProfile(state: IQueryState, query: IResolvedQuery, connection: IConnection) {

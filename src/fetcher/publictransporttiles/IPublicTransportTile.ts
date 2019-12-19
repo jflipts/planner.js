@@ -4,7 +4,7 @@
  * @property id An identifier for the stop that gets used in IConnections
  * @property name Display name of the stop
  */
-export default interface IStop {
+export default interface IPublicTransportTile {
   id: string;
   zoom: number;
   x: number;

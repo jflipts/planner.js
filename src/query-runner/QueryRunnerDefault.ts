@@ -15,7 +15,7 @@ import IQueryRunner from "./IQueryRunner";
 import IResolvedQuery from "./IResolvedQuery";
 
 /**
- * The default `minimumDepartureTime` is *now*. The default `maximumArrivalTime` is `minimumDepartureTime + 2 hours`.
+ * The default `minimumDepartureTime` is *now*. The default `maximumArrivalTime` is `minimumDepartureTime + 12 hours`.
  */
 @injectable()
 export default class QueryRunnerDefault implements IQueryRunner {

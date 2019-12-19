@@ -37,6 +37,7 @@ import FlatMapIterator from "../../util/iterators/FlatMapIterator";
 import Path from "../Path";
 
 import { PromiseProxyIterator } from "asynciterator-promiseproxy";
+import TileFetchStrategyLineQueryIterator from "./tiles/TileFetchStrategyLineQueryIterator";
 
 interface IFinalReachableStops {
   [stop: string]: IReachableStop;
@@ -88,7 +89,7 @@ export default class CSAEarliestArrivalTiled implements IPublicTransportPlanner 
   protected readonly availablePublicTransportTilesProvider: IPublicTransportTilesProvider;
 
   protected journeyExtractor: IJourneyExtractor;
-  private tilesToFetchIterator: AsyncIterator<Set<IPublicTransportTile>>;
+  private tilesToFetchIterator: AsyncIterator<IResolvedQueryTiled>;
 
   constructor(
     @inject(TYPES.ConnectionsProvider)
@@ -123,59 +124,32 @@ export default class CSAEarliestArrivalTiled implements IPublicTransportPlanner 
 
   public async plan(query: IResolvedQuery): Promise<AsyncIterator<IPath>> {
     // This is hardcoded and should be injected trough a factory
-    this.tilesToFetchIterator = new TileFetchStrategyLineIterator(
+    this.tilesToFetchIterator = new TileFetchStrategyLineQueryIterator(
       this.availablePublicTransportTilesProvider, query);
 
-    //   const subqueryIterator = new FlatMapIterator<Promise<Set<IPublicTransportTile>>, IPath>(
-    //     tilesToFetchIterator,
-    //     this.runSubquery.bind(this),
-    //   );
+    // Iterator that combines all iterators returned by the second argument.
+    // Second argument will be run with a query pulled from first argument.
+    // First argument is an iterator that provides queries with a tilesToFetch field
+    const subqueryIterator = new FlatMapIterator<IResolvedQueryTiled, IPath>(
+      this.tilesToFetchIterator,
+      runPlannerWithSource.bind(this),
+    );
 
-    //   return new FilterUniqueIterator<IPath>(subqueryIterator, Path.compareEquals);
-    // }
+    // Nested function to deal with the Promise
+    function runPlannerWithSource(queryTiled: IResolvedQueryTiled): AsyncIterator<IPath> {
+      return new PromiseProxyIterator(() => this.runPlanner(queryTiled));
+    }
 
-    // private runSubquery(query: IResolvedQuery): AsyncIterator<IPath> {
-    //   // TODO investigate if publicTransportPlanner can be reused or reuse some of its aggregated data
-    //   this.eventBus.emit(EventType.SubQuery, query);
-
-    //   const queryCopy = Object.assign({}, query);
-
-    //   return new PromiseProxyIterator(() => this.runPlanner(queryCopy));
-    // }
-
-    const self = this;
-    return new Promise((resolve, reject) => {
-      let isDone: boolean = false;
-
-      const done = () => {
-        if (!isDone) {
-          self.tilesToFetchIterator.close();
-
-          isDone = true;
-        }
-      };
-
-      self.tilesToFetchIterator.on("readable", () =>
-        self.runPlanner(query, done).then((resultIterator) => {
-          resolve(resultIterator);
-        }),
-      );
-
-      self.tilesToFetchIterator.on("end", () => done());
-
-      // iterator may have become readable before the listener was attached
-      self.runPlanner(query, done);
-
-    }) as Promise<AsyncIterator<IPath>>;
+    // Running the planner with different tilesToFetch sets may result in same result, filter those
+    return new FilterUniqueIterator<IPath>(subqueryIterator, Path.compareEquals);
   }
 
-  protected async runPlanner(query: IResolvedQuery, resolvePlanner: () => void): Promise<AsyncIterator<IPath>> {
+  protected async runPlanner(query: IResolvedQueryTiled): Promise<AsyncIterator<IPath>> {
     const {
       minimumDepartureTime: lowerBoundDate,
       maximumArrivalTime: upperBoundDate,
+      tilesToFetch: tilesToFetch,
     } = query;
-
-    const tilesToFetch: Set<IPublicTransportTile> = this.tilesToFetchIterator.read();
 
     if (tilesToFetch && !this.tilesToFetchIterator.closed) {
 

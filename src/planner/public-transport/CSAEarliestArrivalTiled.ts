@@ -30,7 +30,6 @@ import FootpathQueue from "./CSA/FootpathQueue";
 import IJourneyExtractor from "./IJourneyExtractor";
 import IPublicTransportPlanner from "./IPublicTransportPlanner";
 import JourneyExtractorEarliestArrival from "./JourneyExtractorEarliestArrival";
-import TileFetchStrategyLineIterator from "./tiles/TileFetchStrategyLineIterator";
 
 import FilterUniqueIterator from "../../util/iterators/FilterUniqueIterator";
 import FlatMapIterator from "../../util/iterators/FlatMapIterator";

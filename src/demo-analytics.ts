@@ -69,7 +69,7 @@ export default async (logResults) => {
     //     maximumTransferDuration: Units.fromMinutes(30),
     // };
 
-    const amount = 1;
+    const amount = 2;
 
     planner
         .setProfileID("https://hdelva.be/profile/pedestrian")
@@ -110,7 +110,7 @@ export default async (logResults) => {
             from: "Brugge",
             to: "Leuven",
 
-            minimumDepartureTime: new Date(),
+            minimumDepartureTime: new Date(2019, 11, 1),
             maximumTransferDuration: Units.fromMinutes(30),
         })
         .take(amount)

@@ -37,6 +37,7 @@ import FlatMapIterator from "../../util/iterators/FlatMapIterator";
 import Path from "../Path";
 
 import { PromiseProxyIterator } from "asynciterator-promiseproxy";
+import TileFetchStrategyExpandingQueryIterator from "./tiles/TileFetchStrategyExpandingQueryIterator";
 import TileFetchStrategyLineQueryIterator from "./tiles/TileFetchStrategyLineQueryIterator";
 
 interface IFinalReachableStops {
@@ -65,12 +66,13 @@ export default class CSAEarliestArrivalTiled implements IPublicTransportPlanner 
     }
 
     let earliestIndex = 0;
-    const earliest = connections[earliestIndex];
+    let earliest = connections[0];
 
     for (let i = 1; i < connections.length; i++) {
       const connection = connections[i];
 
       if (connection && connection.departureTime < earliest.departureTime) {
+        earliest = connection;
         earliestIndex = i;
       }
     }
@@ -123,8 +125,10 @@ export default class CSAEarliestArrivalTiled implements IPublicTransportPlanner 
   }
 
   public async plan(query: IResolvedQuery): Promise<AsyncIterator<IPath>> {
-    // This is hardcoded and should be injected trough a factory
-    this.tilesToFetchIterator = new TileFetchStrategyLineQueryIterator(
+    // TODO: This is hardcoded and should be injected trough a factory
+    // this.tilesToFetchIterator = new TileFetchStrategyLineQueryIterator(
+    //   this.availablePublicTransportTilesProvider, query);
+    this.tilesToFetchIterator = new TileFetchStrategyExpandingQueryIterator(
       this.availablePublicTransportTilesProvider, query);
 
     // Iterator that combines all iterators returned by the second argument.

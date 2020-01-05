@@ -1,14 +1,25 @@
-import { BasicTrainPlanner, CustomPlanner } from ".";
+import { BasicTrainPlanner, CustomPlanner, TravelMode } from ".";
+import Catalog from "./Catalog";
 import EventBus from "./events/EventBus";
 import EventType from "./events/EventType";
 import IPath from "./interfaces/IPath";
+import Planner from "./planner/configurations/Planner";
 import IResolvedQueryTiled from "./planner/public-transport/IResolvedQueryTiled";
 import Units from "./util/Units";
 
+import fs = require("fs");
+import path = require("path");
+
 export default async (logResults: boolean) => {
 
-    const planner = new CustomPlanner();
-    // const planner = new BasicTrainPlanner();
+    const catalogNmbs = new Catalog();
+    catalogNmbs.addStopsSource("https://irail.be/stations/NMBS");
+    catalogNmbs.addConnectionsSource("http://localhost:3000/nmbs-tiled-onelevel/connections/12/{x}/{y}",
+        TravelMode.Train);
+    catalogNmbs.addAvailablePublicTransportTilesSource("http://localhost:3000/nmbs-tiled-onelevel/tiles");
+
+    const planner = new CustomPlanner(catalogNmbs);
+    const baseLinePlanner = new BasicTrainPlanner();
 
     if (logResults) {
         let scannedPages = 0;
@@ -73,12 +84,16 @@ export default async (logResults: boolean) => {
         console.log(`${new Date()} Start query`);
     }
 
-    // let queryTemplate = {
-    //     from : "",
-    //     to : "",
-    //     minimumDepartureTime: new Date(),
-    //     maximumTransferDuration: Units.fromMinutes(30),
-    // };
+    const queries = await readQueries("/home/jflipts/Documents/queries-nmbs", 3, new Date(2019, 11, 1));
+    const metrics = [];
+
+    for (const query of queries) {
+        await executeQuery(planner, query)
+            .then((queryMetrics) => {
+                metrics.push(queryMetrics);
+            });
+
+    }
 
     const amount = 2;
 
@@ -128,11 +143,11 @@ export default async (logResults: boolean) => {
         .on("error", (error) => {
             console.log(error);
         })
-        .on("data", (path: IPath) => {
+        .on("data", (journey: IPath) => {
 
             if (logResults) {
                 console.log(new Date());
-                console.log(JSON.stringify(path, null, " "));
+                console.log(JSON.stringify(journey, null, " "));
                 console.log("\n");
             }
         })
@@ -141,3 +156,122 @@ export default async (logResults: boolean) => {
         });
 
 };
+
+/* tslint:disable:no-string-literal */
+
+function executeQuery(planner: Planner, query) {
+    return new Promise((resolve, reject) => {
+        // TODO accuracy
+        let stageNumber = 1;
+        let stageScannedPages = 0;
+        let stageScannedPagesSize = 0;
+        let totalScannedPages = 0;
+        let totalScannedPagesSize = 0;
+        let earliestArrivalTime;
+        const queryMetrics = {
+            query,
+            stages: [],
+        };
+
+        EventBus.getInstance()
+            .on(EventType.TiledQuery, (resolvedQuery: IResolvedQueryTiled) => {
+                const numberOfTiles = resolvedQuery.tilesToFetch.size;
+                const stage = {
+                    stage: stageNumber,
+                    scannedTiles: numberOfTiles,
+                    scannedPages: stageScannedPages,
+                    scannedPagesSize: stageScannedPagesSize / 1024,
+                };
+                queryMetrics.stages.push(stage);
+
+                stageScannedPages = 0;
+                stageScannedPagesSize = 0;
+
+                if (stageNumber === 1) {
+                    queryMetrics["firstResultDuration"] = (new Date().getTime() - t0) / 1000;
+                }
+
+                // This is a workaround as "end" is not called on the Iterator.
+                // This should be equal to the number of times the Planner is run per query
+                if (stageNumber === 5) {
+                    queryMetrics["totalDuration"] = (new Date().getTime() - t0) / 1000;
+                    queryMetrics["totalScannedPages"] = totalScannedPages;
+                    queryMetrics["totalScannedPagesSize"] = totalScannedPagesSize / 1024;
+                    queryMetrics["earliestArrivalTime"] = earliestArrivalTime;
+
+                    resolve(queryMetrics);
+                }
+
+                stageNumber++;
+            })
+            .on(EventType.LDFetchGet, (url: string, duration, size?: number) => {
+                if (url.includes("connections")) {
+                    stageScannedPages++;
+                    totalScannedPages++;
+
+                    if (size) {
+                        stageScannedPagesSize += +size;
+                        totalScannedPagesSize += +size;
+                    }
+                }
+                if (url.includes("tiles") && size) {
+                    queryMetrics["tiles"] = size;
+                }
+            });
+
+        const t0 = new Date().getTime();
+        planner
+            .setProfileID("https://hdelva.be/profile/pedestrian")
+            .query(query)
+            .on("data", (journey: IPath) => {
+                const arrivalTime = journey.getArrivalTime(query);
+                if (!earliestArrivalTime || arrivalTime < earliestArrivalTime) {
+                    earliestArrivalTime = arrivalTime;
+                }
+            })
+            .on("end", () => {
+                queryMetrics["totalDuration"] = (new Date().getTime() - t0) / 1000;
+                queryMetrics["totalScannedPages"] = totalScannedPages;
+                queryMetrics["totalScannedPagesSize"] = totalScannedPagesSize;
+                queryMetrics["earliestArrivalTime"] = earliestArrivalTime;
+
+                resolve(queryMetrics);
+            });
+    });
+}
+
+/**
+ * Read a number of queries from a folder
+ *
+ * @param folderPath
+ * @param amount
+ * @param dateOfQueries
+ */
+async function readQueries(folderPath: string, amount: number, dateOfQueries: Date = new Date()) {
+    const fileNames = fs.readdirSync(folderPath);
+
+    const queries = [];
+
+    for (let i = 0; i < amount; i++) {
+        const buffer = await fs.promises.readFile(path.join(folderPath, fileNames[i]));
+
+        const query = JSON.parse(buffer.toString()).query;
+
+        const queryDate = new Date(query["query_time"]);
+        queryDate.setFullYear(dateOfQueries.getFullYear());
+        queryDate.setMonth(dateOfQueries.getMonth());
+        queryDate.setDate(dateOfQueries.getDate());
+
+        const queryTemplate = {
+            from: query["departure_stop"],
+            to: query["arrival_stop"],
+            minimumDepartureTime: queryDate,
+            maximumTransferDuration: Units.fromMinutes(30),
+        };
+
+        queries.push(queryTemplate);
+    }
+
+    return queries;
+}
+/* tslint:enable:no-string-literal */

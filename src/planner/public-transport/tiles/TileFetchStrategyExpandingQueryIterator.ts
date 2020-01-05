@@ -1,5 +1,6 @@
 import { AsyncIterator } from "asynciterator";
 import { inject, injectable } from "inversify";
+import Catalog from "../../../Catalog";
 import IPublicTransportTile from "../../../fetcher/publictransporttiles/IPublicTransportTile";
 import IPublicTransportTilesProvider from "../../../fetcher/publictransporttiles/IPublicTransportTilesProvider";
 import ILocation from "../../../interfaces/ILocation";
@@ -17,12 +18,11 @@ interface IResolvedQueryTiled extends IResolvedQuery {
 export default class TileFetchStrategyExpandingQueryIterator extends AsyncIterator<IResolvedQueryTiled> {
 
     protected readonly availablePublicTransportTilesProvider: IPublicTransportTilesProvider;
+    protected readonly catalog: Catalog;
     protected readonly query;
 
     // Internal variable keeping track of the next complete query that may be read
     private value: IResolvedQueryTiled;
-    // Counter to keep track of number of Tiles that still need to return
-    private waitingOnTiles: number;
     // Number of queries that have been read
     private readQueryCounter: number = 0;
     // Previous tile candidates to build further upon
@@ -31,11 +31,13 @@ export default class TileFetchStrategyExpandingQueryIterator extends AsyncIterat
     constructor(
         @inject(TYPES.PublicTransportTilesProvider)
         availablePublicTransportTilesProvider: IPublicTransportTilesProvider,
+        @inject(TYPES.Catalog) catalog: Catalog,
         query: IResolvedQuery,
     ) {
         super();
 
         this.availablePublicTransportTilesProvider = availablePublicTransportTilesProvider;
+        this.catalog = catalog;
         this.query = query;
 
         this.availablePublicTransportTilesProvider.prefetchAvailableTiles();
@@ -55,12 +57,11 @@ export default class TileFetchStrategyExpandingQueryIterator extends AsyncIterat
 
         // Value should be null afterwards
         if (this.value) {
-            this.readable = false;
+
             this.readQueryCounter++;
 
             const temp = this.value;
             this.value = null;
-            this.runQuery();
 
             return temp;
         } else {
@@ -179,39 +180,38 @@ export default class TileFetchStrategyExpandingQueryIterator extends AsyncIterat
                     }
                 });
             }
-
-            // Save the set of tiles in the state
-            this.tileCandidatesPrevious = tileCandidates;
         }
+
+        // Save the set of tiles in the state
+        this.tileCandidatesPrevious = tileCandidates;
 
         // Set of tiles that will actually be fetched
         const tilesToFetch = new Set<IPublicTransportTile>();
         const self = this;
 
-        this.waitingOnTiles = 0;
+        const availableTilesPromises = [];
 
         // Tiles may not actually exist -> filter these
         for (const value of tileCandidates.values()) {
             // Hardcoded on first connectionsource
-            let accessUrl = "http://localhost:3000/nmbs-tiled/connections/12/{x}/{y}";
+            let accessUrl = this.catalog.connectionsSourceConfigs[0].accessUrl;
             accessUrl = accessUrl.replace("{zoom}", value.zoom.toString());
             accessUrl = accessUrl.replace("{x}", value.x.toString());
             accessUrl = accessUrl.replace("{y}", value.y.toString());
 
-            this.waitingOnTiles++;
-
-            this.availablePublicTransportTilesProvider.getPublicTransportTileById(accessUrl)
+            const tilePromise = this.availablePublicTransportTilesProvider.getPublicTransportTileById(accessUrl)
                 .then((tile) => {
                     if (tile) {
                         tilesToFetch.add(tile);
                     }
-                    if (--this.waitingOnTiles === 0) {
-                        self.value = this.query;
-                        self.value.tilesToFetch = tilesToFetch;
-                        self.readable = true;
-                    }
                 });
+            availableTilesPromises.push(tilePromise);
         }
+        Promise.all(availableTilesPromises).then(() => {
+            self.value = this.query;
+            self.value.tilesToFetch = tilesToFetch;
+            self.readable = true;
+        });
 
         return tilesToFetch;
     }

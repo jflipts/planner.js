@@ -2,20 +2,22 @@ import { BasicTrainPlanner, CustomPlanner } from ".";
 import EventBus from "./events/EventBus";
 import EventType from "./events/EventType";
 import IPath from "./interfaces/IPath";
+import IResolvedQueryTiled from "./planner/public-transport/IResolvedQueryTiled";
 import Units from "./util/Units";
 
-export default async (logResults) => {
+export default async (logResults: boolean) => {
 
     const planner = new CustomPlanner();
     // const planner = new BasicTrainPlanner();
 
     if (logResults) {
         let scannedPages = 0;
+        let scannedPagesSize = 0;
         let scannedConnections = 0;
 
         const eventBus = EventBus.getInstance();
 
-        // let logFetch = true;
+        const logFetch = false; // Log urls
 
         if (logResults) {
             console.log(`${new Date()} Start prefetch`);
@@ -31,24 +33,33 @@ export default async (logResults) => {
             .on(EventType.Query, (Query) => {
                 console.log("Query", Query);
             })
+            .on(EventType.TiledQuery, (query: IResolvedQueryTiled) => {
+                const numberOfTiles = query.tilesToFetch.size;
+                console.log("Total scanned tiles", numberOfTiles);
+                console.log("Total scanned pages", scannedPages);
+                console.log("Total scanned pages size", Math.floor(scannedPagesSize / 1024));
+                scannedPages = 0;
+                scannedPagesSize = 0;
+            })
             .on(EventType.SubQuery, (query) => {
                 const { minimumDepartureTime, maximumArrivalTime } = query;
-
-                // logFetch = true;
 
                 console.log("Total scanned pages", scannedPages);
                 console.log("Total scanned connections", scannedConnections);
                 console.log("[Subquery]", minimumDepartureTime, maximumArrivalTime,
-                maximumArrivalTime - minimumDepartureTime);
+                    maximumArrivalTime - minimumDepartureTime);
             })
-            .on(EventType.LDFetchGet, (url, duration) => {
-                scannedPages++;
-                console.log(`[GET] ${url} (${duration}ms)`);
+            .on(EventType.LDFetchGet, (url: string, duration, size?: number) => {
+                if (url.includes("connections")) {
+                    scannedPages++;
+                    if (size) {
+                        scannedPagesSize += size;
+                    }
+                }
 
-                // if (logFetch) {
-                //   console.log(`[GET] ${url} (${duration}ms)`);
-                //   logFetch = false;
-                // }
+                if (logFetch) {
+                    console.log(`[GET] ${url} (${duration}ms)`);
+                }
             })
             .on(EventType.ConnectionScan, (connection) => {
                 scannedConnections++;
@@ -110,7 +121,7 @@ export default async (logResults) => {
             from: "Brugge",
             to: "Leuven",
 
-            minimumDepartureTime: new Date(2019, 11, 1),
+            minimumDepartureTime: new Date(2019, 11, 1), // 1 December 2019...
             maximumTransferDuration: Units.fromMinutes(30),
         })
         .take(amount)

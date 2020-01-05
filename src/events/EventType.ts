@@ -3,6 +3,7 @@ enum EventType {
   SubQuery = "sub-query",
   AbortQuery = "abort-query",
   InvalidQuery = "invalid-query",
+  TiledQuery = "tiled-query",
 
   LDFetchGet = "ldfetch-get",
 

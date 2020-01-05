@@ -72,7 +72,7 @@ export default class ConnectionsFetcherRaw implements IConnectionsFetcher {
             const previousPageUrl = blob["hydra:previous"];
 
             const duration = (new Date()).getTime() - beginTime.getTime();
-            EventBus.getInstance().emit(EventType.LDFetchGet, url, duration);
+            EventBus.getInstance().emit(EventType.LDFetchGet, url, duration, +response.headers.get("Content-Length"));
             EventBus.getInstance().emit(EventType.ConnectionPrefetch, connections[0].departureTime);
             EventBus.getInstance().emit(EventType.ConnectionPrefetch,
                 connections[connections.length - 1].departureTime);

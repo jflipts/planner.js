@@ -29,6 +29,7 @@ import IEnterConnectionByTrip from "./CSA/data-structure/trips/IEnterConnectionB
 import FootpathQueue from "./CSA/FootpathQueue";
 import IJourneyExtractor from "./IJourneyExtractor";
 import IPublicTransportPlanner from "./IPublicTransportPlanner";
+import IResolvedQueryTiled from "./IResolvedQueryTiled";
 import JourneyExtractorEarliestArrival from "./JourneyExtractorEarliestArrival";
 
 import FilterUniqueIterator from "../../util/iterators/FilterUniqueIterator";
@@ -49,10 +50,6 @@ interface IQueryState {
   enterConnectionByTrip: IEnterConnectionByTrip; // T
   footpathsQueue: FootpathQueue;
   connectionsQueue: AsyncIterator<IConnection>;
-}
-
-interface IResolvedQueryTiled extends IResolvedQuery {
-  tilesToFetch: Set<IPublicTransportTile>;
 }
 
 // Implementation is as close as possible to the original paper: https://arxiv.org/pdf/1703.05997.pdf
@@ -124,11 +121,12 @@ export default class CSAEarliestArrivalTiled implements IPublicTransportPlanner 
   }
 
   public async plan(query: IResolvedQuery): Promise<AsyncIterator<IPath>> {
-    // TODO: This is hardcoded and should be injected trough a factory
+    // TODO: This is hardcoded and should be injected trough a factory.
+    // However I don't really know how to do this with the parameter query that is not injected.
     // this.tilesToFetchIterator = new TileFetchStrategyLineQueryIterator(
     //   this.availablePublicTransportTilesProvider, query);
     this.tilesToFetchIterator = new TileFetchStrategyExpandingQueryIterator(
-      this.availablePublicTransportTilesProvider, query);
+      this.availablePublicTransportTilesProvider, this.catalog, query);
 
     // Iterator that combines all iterators returned by the second argument.
     // Second argument will be run with a query pulled from first argument.
@@ -215,6 +213,8 @@ export default class CSAEarliestArrivalTiled implements IPublicTransportPlanner 
 
         const done = () => {
           if (!isDone) {
+            this.eventBus.emit(EventType.TiledQuery, query);
+
             connectionsQueue.close();
 
             self.extractJourneys(queryState, query)

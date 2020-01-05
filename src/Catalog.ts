@@ -47,4 +47,5 @@ export interface IConnectionsSourceConfig {
 
 export interface IAvailablePublicTransportTilesConfig {
   accessUrl: string;
+  onelevelzoom?: number;
 }

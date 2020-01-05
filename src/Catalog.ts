@@ -31,8 +31,12 @@ export default class Catalog {
     this.connectionsSourceConfigs.push({accessUrl, travelMode});
   }
 
-  public addAvailablePublicTransportTilesSource(accessUrl: string) {
-    this.availablePublicTransportTilesConfigs.push({accessUrl});
+  public addAvailablePublicTransportTilesSource(accessUrl: string, onelevelzoom?: number) {
+    if (onelevelzoom) {
+      this.availablePublicTransportTilesConfigs.push({accessUrl, onelevelzoom});
+    } else {
+      this.availablePublicTransportTilesConfigs.push({accessUrl});
+    }
   }
 }
 

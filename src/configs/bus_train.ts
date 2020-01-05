@@ -115,7 +115,7 @@ container.bind<IRoutableTileProvider>(TYPES.RoutableTileProvider)
   .to(RoutableTileProviderTransit).inSingletonScope().whenTargetTagged("phase", RoutingPhase.Transit);
 
 // Bind catalog
-const combined = Catalog.combine(catalogNmbs, catalogOVl);
+const combined = Catalog.combine(catalogNmbs);
 container.bind<Catalog>(TYPES.Catalog).toConstantValue(combined);
 
 // Init LDFetch

@@ -1,4 +1,7 @@
-import { BasicTrainPlanner, CustomPlanner, TravelMode } from ".";
+import {
+    BasicTrainPlanner, CustomPlanner,
+    DelijnNmbsPlanner, TravelMode,
+} from ".";
 import Catalog from "./Catalog";
 import EventBus from "./events/EventBus";
 import EventType from "./events/EventType";
@@ -9,17 +12,20 @@ import Units from "./util/Units";
 
 import fs = require("fs");
 import path = require("path");
+import IQuery from "./interfaces/IQuery";
+import IResolvedQuery from "./query-runner/IResolvedQuery";
 
 export default async (logResults: boolean) => {
 
-    const catalogNmbs = new Catalog();
-    catalogNmbs.addStopsSource("https://irail.be/stations/NMBS");
-    catalogNmbs.addConnectionsSource("http://localhost:3000/nmbs-tiled-onelevel/connections/12/{x}/{y}",
+    const catalogNmbsTiledOneLevel = new Catalog();
+    catalogNmbsTiledOneLevel.addStopsSource("https://irail.be/stations/NMBS");
+    catalogNmbsTiledOneLevel.addConnectionsSource("http://localhost:3000/nmbs-tiled-onelevel/connections/12/{x}/{y}",
         TravelMode.Train);
-    catalogNmbs.addAvailablePublicTransportTilesSource("http://localhost:3000/nmbs-tiled-onelevel/tiles");
+    catalogNmbsTiledOneLevel
+        .addAvailablePublicTransportTilesSource("http://localhost:3000/nmbs-tiled-onelevel/tiles", 12);
 
-    const planner = new CustomPlanner(catalogNmbs);
-    const baseLinePlanner = new BasicTrainPlanner();
+    const plannerTiledOnelevel = new CustomPlanner(catalogNmbsTiledOneLevel);
+    const baseLinePlanner = new DelijnNmbsPlanner(); // Delijn removed from catalog
 
     if (logResults) {
         let scannedPages = 0;
@@ -84,20 +90,37 @@ export default async (logResults: boolean) => {
         console.log(`${new Date()} Start query`);
     }
 
-    const queries = await readQueries("/home/jflipts/Documents/queries-nmbs", 3, new Date(2019, 11, 1));
-    const metrics = [];
+    const queries: IQuery[] = await readQueries("/home/jflipts/Documents/queries-nmbs", 3, new Date(2019, 11, 1));
+
+    const metricsBaseline = [];
+    const metricsStraightLineOneLevel = [];
+    const metricsStraightLineMultiLevel = [];
+    const metricsExpandingOneLevel = [];
+    const metricsTreeOneLevel = [];
+    const metricsTreeMultiLevel = [];
 
     for (const query of queries) {
-        await executeQuery(planner, query)
+        await executeQuery(baseLinePlanner, query)
             .then((queryMetrics) => {
-                metrics.push(queryMetrics);
+                metricsBaseline.push(queryMetrics);
             });
 
+        query.tilesFetchStrategy = "straight-line";
+        await executeQuery(plannerTiledOnelevel, query)
+            .then((queryMetrics) => {
+                metricsStraightLineOneLevel.push(queryMetrics);
+            });
+
+        query.tilesFetchStrategy = "expanding";
+        await executeQuery(plannerTiledOnelevel, query)
+            .then((queryMetrics) => {
+                metricsExpandingOneLevel.push(queryMetrics);
+            });
     }
 
     const amount = 2;
 
-    planner
+    plannerTiledOnelevel
         .setProfileID("https://hdelva.be/profile/pedestrian")
         .query({
             // roadNetworkOnly: true,
@@ -159,7 +182,7 @@ export default async (logResults: boolean) => {
 
 /* tslint:disable:no-string-literal */
 
-function executeQuery(planner: Planner, query) {
+function executeQuery(planner: Planner, query: IQuery) {
     return new Promise((resolve, reject) => {
         // TODO accuracy
         let stageNumber = 1;
@@ -187,13 +210,11 @@ function executeQuery(planner: Planner, query) {
                 stageScannedPages = 0;
                 stageScannedPagesSize = 0;
 
-                if (stageNumber === 1) {
-                    queryMetrics["firstResultDuration"] = (new Date().getTime() - t0) / 1000;
-                }
-
                 // This is a workaround as "end" is not called on the Iterator.
                 // This should be equal to the number of times the Planner is run per query
-                if (stageNumber === 5) {
+                if ((stageNumber === 5 && query.tilesFetchStrategy === "expanding") ||
+                    query.tilesFetchStrategy === "straight-line") {
+
                     queryMetrics["totalDuration"] = (new Date().getTime() - t0) / 1000;
                     queryMetrics["totalScannedPages"] = totalScannedPages;
                     queryMetrics["totalScannedPagesSize"] = totalScannedPagesSize / 1024;
@@ -224,18 +245,31 @@ function executeQuery(planner: Planner, query) {
             .setProfileID("https://hdelva.be/profile/pedestrian")
             .query(query)
             .on("data", (journey: IPath) => {
+                if (!earliestArrivalTime) {
+                    queryMetrics["firstResultDuration"] = (new Date().getTime() - t0) / 1000;
+                }
+
                 const arrivalTime = journey.getArrivalTime(query);
                 if (!earliestArrivalTime || arrivalTime < earliestArrivalTime) {
                     earliestArrivalTime = arrivalTime;
                 }
+
+                if (false) {
+                    console.log(new Date());
+                    console.log(JSON.stringify(journey, null, " "));
+                    console.log("\n");
+                }
             })
-            .on("end", () => {
+            .on("end", () => { // Gets called on CSAEarliestArrival
                 queryMetrics["totalDuration"] = (new Date().getTime() - t0) / 1000;
                 queryMetrics["totalScannedPages"] = totalScannedPages;
-                queryMetrics["totalScannedPagesSize"] = totalScannedPagesSize;
+                queryMetrics["totalScannedPagesSize"] = totalScannedPagesSize / 1024;
                 queryMetrics["earliestArrivalTime"] = earliestArrivalTime;
 
                 resolve(queryMetrics);
+            })
+            .on("error", (error) => {
+                console.log(error);
             });
     });
 }
@@ -250,7 +284,7 @@ function executeQuery(planner: Planner, query) {
 async function readQueries(folderPath: string, amount: number, dateOfQueries: Date = new Date()) {
     const fileNames = fs.readdirSync(folderPath);
 
-    const queries = [];
+    const queries: IQuery[] = [];
 
     for (let i = 0; i < amount; i++) {
         const buffer = await fs.promises.readFile(path.join(folderPath, fileNames[i]));

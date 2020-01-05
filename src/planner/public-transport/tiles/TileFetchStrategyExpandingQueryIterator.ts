@@ -6,15 +6,13 @@ import IPublicTransportTilesProvider from "../../../fetcher/publictransporttiles
 import ILocation from "../../../interfaces/ILocation";
 import IResolvedQuery from "../../../query-runner/IResolvedQuery";
 import TYPES from "../../../types";
+import IResolvedQueryTiled from "../IResolvedQueryTiled";
 import Slippy from "./Slippy";
-
-interface IResolvedQueryTiled extends IResolvedQuery {
-    tilesToFetch: Set<IPublicTransportTile>;
-}
 
 // IResolvedQueryTiled Iterator that returns a larger set of tiles on every read
 // Limited to 5 times
-// @injectable()
+
+// Cannot inject this class because AsyncIterator cannot be injected
 export default class TileFetchStrategyExpandingQueryIterator extends AsyncIterator<IResolvedQueryTiled> {
 
     protected readonly availablePublicTransportTilesProvider: IPublicTransportTilesProvider;
@@ -97,8 +95,8 @@ export default class TileFetchStrategyExpandingQueryIterator extends AsyncIterat
             }
 
         } else {
-            // TODO Should become catalog variable or based on availableTilesProvider
-            const zoomlevel = 12;
+            // Hardcoded on first AvailableTileSource
+            const zoomlevel = this.catalog.availablePublicTransportTilesConfigs[0].onelevelzoom;
 
             const fromLocation: ILocation = this.query.from[0];
             const toLocation: ILocation = this.query.to[0];
@@ -128,42 +126,6 @@ export default class TileFetchStrategyExpandingQueryIterator extends AsyncIterat
 
                 const neighbours = [rightTile, leftTile, aboveTile, belowTile];
 
-                // AABB - line segment intersection test
-                function intersects(tile: { x, y, zoom }, line: { x1, y1, x2, y2 }): boolean {
-                    const bbox = Slippy.getBBox(tile.x, tile.y, tile.zoom);
-
-                    let above = 0;
-                    bbox.forEach((element) => {
-                        const f = (line.y2 - line.y1) * element.longitude
-                            + (line.x1 - line.x2) * element.latitude
-                            + (line.x2 * line.y1 - line.x1 * line.y2);
-                        if (f === 0) {
-                            return true;
-                        } else if (f > 0) {
-                            above += 1;
-                        } else {
-                            above -= 1;
-                        }
-                    });
-
-                    if (above === 4 || above === -4) {
-                        return false;
-                    } else {
-                        const BL = bbox[1];
-                        const TR = bbox[2];
-
-                        if (
-                            (line.x1 > TR.longitude && line.x2 > TR.longitude) ||
-                            (line.x1 < BL.longitude && line.x2 < BL.longitude) ||
-                            (line.y1 > TR.latitude && line.y2 > TR.latitude) ||
-                            (line.y1 < BL.latitude && line.y2 < BL.latitude)
-                        ) {
-                            return false;
-                        }
-                    }
-                    return true;
-                }
-
                 const line = {
                     x1: fromLocation.longitude,
                     y1: fromLocation.latitude,
@@ -172,7 +134,7 @@ export default class TileFetchStrategyExpandingQueryIterator extends AsyncIterat
                 };
 
                 neighbours.forEach((neighbour) => {
-                    if (intersects(neighbour, line)) {
+                    if (Slippy.intersects(neighbour, line)) {
                         if (!tileCandidates.has(JSON.stringify(neighbour))) {
                             tileCandidates.set(JSON.stringify(neighbour), neighbour);
                             currentTile = neighbour;

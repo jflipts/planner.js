@@ -21,4 +21,5 @@ export default interface IQuery {
   maximumTransfers?: number;
   maximumTravelDuration?: DurationMs;
   excludedTravelModes?: TravelMode[];
+  tilesFetchStrategy?: string;
 }

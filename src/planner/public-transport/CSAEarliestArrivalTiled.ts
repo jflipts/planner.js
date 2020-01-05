@@ -121,12 +121,20 @@ export default class CSAEarliestArrivalTiled implements IPublicTransportPlanner 
   }
 
   public async plan(query: IResolvedQuery): Promise<AsyncIterator<IPath>> {
-    // TODO: This is hardcoded and should be injected trough a factory.
-    // However I don't really know how to do this with the parameter query that is not injected.
-    // this.tilesToFetchIterator = new TileFetchStrategyLineQueryIterator(
-    //   this.availablePublicTransportTilesProvider, query);
-    this.tilesToFetchIterator = new TileFetchStrategyExpandingQueryIterator(
-      this.availablePublicTransportTilesProvider, this.catalog, query);
+
+    // Would be better to do this through injection, but AsyncIterator is not injectable
+    // This is a workaround
+    if (query.tilesFetchStrategy === "straight-line") {
+      this.tilesToFetchIterator = new TileFetchStrategyLineQueryIterator(
+        this.availablePublicTransportTilesProvider, this.catalog, query);
+    } else if (query.tilesFetchStrategy === "expanding") {
+      this.tilesToFetchIterator = new TileFetchStrategyExpandingQueryIterator(
+        this.availablePublicTransportTilesProvider, this.catalog, query);
+    } else if (query.tilesFetchStrategy === "tree") {
+      // TODO
+    } else {
+      throw Error("No tilesFetchStrategySpecified");
+    }
 
     // Iterator that combines all iterators returned by the second argument.
     // Second argument will be run with a query pulled from first argument.
@@ -157,6 +165,7 @@ export default class CSAEarliestArrivalTiled implements IPublicTransportPlanner 
       // For each tile create a catalog and for each catalog a ConnectionProvider
       const tileIterators = [];
       tilesToFetch.forEach((value: IPublicTransportTile, _1, _2) => {
+        // Hardcoded on first connectionsSource
         const tileCatalog = new Catalog();
         let { accessUrl } = this.catalog.connectionsSourceConfigs[0];
         const { travelMode } = this.catalog.connectionsSourceConfigs[0];

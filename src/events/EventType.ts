@@ -4,6 +4,7 @@ enum EventType {
   AbortQuery = "abort-query",
   InvalidQuery = "invalid-query",
   TiledQuery = "tiled-query",
+  CSAQuery = "csq-query",
 
   LDFetchGet = "ldfetch-get",
 

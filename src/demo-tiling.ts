@@ -34,7 +34,7 @@ export default async (logResults: boolean) => {
 
         const eventBus = EventBus.getInstance();
 
-        const logFetch = false; // Log urls
+        const logFetch = true; // Log urls
 
         if (logResults) {
             console.log(`${new Date()} Start prefetch`);
@@ -116,6 +116,7 @@ export default async (logResults: boolean) => {
             .then((queryMetrics) => {
                 metricsExpandingOneLevel.push(queryMetrics);
             });
+
     }
 
     const amount = 2;
@@ -184,7 +185,6 @@ export default async (logResults: boolean) => {
 
 function executeQuery(planner: Planner, query: IQuery) {
     return new Promise((resolve, reject) => {
-        // TODO accuracy
         let stageNumber = 1;
         let stageScannedPages = 0;
         let stageScannedPagesSize = 0;
@@ -196,49 +196,56 @@ function executeQuery(planner: Planner, query: IQuery) {
             stages: [],
         };
 
+        // Listeners need to be removed afterwards
+        const tiledQueryListener = (resolvedQuery: IResolvedQueryTiled) => {
+            const numberOfTiles = resolvedQuery.tilesToFetch.size;
+            const stage = {
+                stage: stageNumber,
+                scannedTiles: numberOfTiles,
+                scannedPages: stageScannedPages,
+                scannedPagesSize: stageScannedPagesSize / 1024,
+            };
+            queryMetrics.stages.push(stage);
+
+            stageScannedPages = 0;
+            stageScannedPagesSize = 0;
+
+            // This is a workaround as "end" is not called on the Iterator.
+            // This should be equal to the number of times the Planner is run per query
+            if ((stageNumber === 5 && query.tilesFetchStrategy === "expanding") ||
+                query.tilesFetchStrategy === "straight-line") {
+
+                queryMetrics["totalDuration"] = (new Date().getTime() - t0) / 1000;
+                queryMetrics["totalScannedPages"] = totalScannedPages;
+                queryMetrics["totalScannedPagesSize"] = totalScannedPagesSize / 1024;
+                queryMetrics["earliestArrivalTime"] = earliestArrivalTime;
+
+                EventBus.getInstance().removeListener(EventType.TiledQuery, tiledQueryListener);
+                EventBus.getInstance().removeListener(EventType.LDFetchGet, LDFetchGetListener);
+                resolve(queryMetrics);
+            }
+
+            stageNumber++;
+        };
+
+        const LDFetchGetListener = (url: string, duration, size?: number) => {
+            if (url.includes("connections")) {
+                stageScannedPages++;
+                totalScannedPages++;
+
+                if (size) {
+                    stageScannedPagesSize += +size;
+                    totalScannedPagesSize += +size;
+                }
+            }
+            if (url.includes("tiles") && size) {
+                queryMetrics["tiles"] = size / 1024;
+            }
+        };
+
         EventBus.getInstance()
-            .on(EventType.TiledQuery, (resolvedQuery: IResolvedQueryTiled) => {
-                const numberOfTiles = resolvedQuery.tilesToFetch.size;
-                const stage = {
-                    stage: stageNumber,
-                    scannedTiles: numberOfTiles,
-                    scannedPages: stageScannedPages,
-                    scannedPagesSize: stageScannedPagesSize / 1024,
-                };
-                queryMetrics.stages.push(stage);
-
-                stageScannedPages = 0;
-                stageScannedPagesSize = 0;
-
-                // This is a workaround as "end" is not called on the Iterator.
-                // This should be equal to the number of times the Planner is run per query
-                if ((stageNumber === 5 && query.tilesFetchStrategy === "expanding") ||
-                    query.tilesFetchStrategy === "straight-line") {
-
-                    queryMetrics["totalDuration"] = (new Date().getTime() - t0) / 1000;
-                    queryMetrics["totalScannedPages"] = totalScannedPages;
-                    queryMetrics["totalScannedPagesSize"] = totalScannedPagesSize / 1024;
-                    queryMetrics["earliestArrivalTime"] = earliestArrivalTime;
-
-                    resolve(queryMetrics);
-                }
-
-                stageNumber++;
-            })
-            .on(EventType.LDFetchGet, (url: string, duration, size?: number) => {
-                if (url.includes("connections")) {
-                    stageScannedPages++;
-                    totalScannedPages++;
-
-                    if (size) {
-                        stageScannedPagesSize += +size;
-                        totalScannedPagesSize += +size;
-                    }
-                }
-                if (url.includes("tiles") && size) {
-                    queryMetrics["tiles"] = size;
-                }
-            });
+            .on(EventType.TiledQuery, tiledQueryListener)
+            .on(EventType.LDFetchGet, LDFetchGetListener);
 
         const t0 = new Date().getTime();
         planner
@@ -266,6 +273,8 @@ function executeQuery(planner: Planner, query: IQuery) {
                 queryMetrics["totalScannedPagesSize"] = totalScannedPagesSize / 1024;
                 queryMetrics["earliestArrivalTime"] = earliestArrivalTime;
 
+                EventBus.getInstance().removeListener(EventType.TiledQuery, tiledQueryListener);
+                EventBus.getInstance().removeListener(EventType.LDFetchGet, LDFetchGetListener);
                 resolve(queryMetrics);
             })
             .on("error", (error) => {
@@ -286,8 +295,8 @@ async function readQueries(folderPath: string, amount: number, dateOfQueries: Da
 
     const queries: IQuery[] = [];
 
-    for (let i = 0; i < amount; i++) {
-        const buffer = await fs.promises.readFile(path.join(folderPath, fileNames[i]));
+    for (let i = 0; queries.length < amount; i = i + 97) {
+        const buffer = await fs.promises.readFile(path.join(folderPath, fileNames[i % fileNames.length]));
 
         const query = JSON.parse(buffer.toString()).query;
 

@@ -90,7 +90,7 @@ export default class AvailablePublicTransportTilesFetcher implements IPublicTran
         }
 
         const duration = (new Date()).getTime() - beginTime.getTime();
-        EventBus.getInstance().emit(EventType.LDFetchGet, url, +response.headers.get("Content-Length"));
+        EventBus.getInstance().emit(EventType.LDFetchGet, url, duration, +response.headers.get("Content-Length"));
 
         return tiles;
     }

@@ -17,7 +17,6 @@ export default class TileFetchStrategyLineQueryIterator extends AsyncIterator<IR
     protected readonly query;
 
     private value: IResolvedQueryTiled;
-    private waitingOnTiles;
     private hasReturned: boolean = false;
 
     constructor(

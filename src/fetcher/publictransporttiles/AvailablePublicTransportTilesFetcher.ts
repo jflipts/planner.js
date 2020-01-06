@@ -75,9 +75,9 @@ export default class AvailablePublicTransportTilesFetcher implements IPublicTran
 
             for (const entity of blob["@graph"]) {
                 const id = entity["@id"];
-                const zoom = entity["tiles:zoom"];
-                const longitudeTile = entity["tiles:longitudeTile"];
-                const latitudeTile = entity["tiles:latitudeTile"];
+                const zoom = +entity["tiles:zoom"];
+                const longitudeTile = +entity["tiles:longitudeTile"];
+                const latitudeTile = +entity["tiles:latitudeTile"];
 
                 const tile: IPublicTransportTile = {
                     id,

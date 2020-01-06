@@ -190,7 +190,6 @@ function executeQuery(planner: Planner, query: IQuery) {
         let stageScannedPagesSize = 0;
         let totalScannedPages = 0;
         let totalScannedPagesSize = 0;
-        let earliestArrivalTime;
         const queryMetrics = {
             query,
             stages: [],
@@ -218,7 +217,6 @@ function executeQuery(planner: Planner, query: IQuery) {
                 queryMetrics["totalDuration"] = (new Date().getTime() - t0) / 1000;
                 queryMetrics["totalScannedPages"] = totalScannedPages;
                 queryMetrics["totalScannedPagesSize"] = totalScannedPagesSize / 1024;
-                queryMetrics["earliestArrivalTime"] = earliestArrivalTime;
 
                 EventBus.getInstance().removeListener(EventType.TiledQuery, tiledQueryListener);
                 EventBus.getInstance().removeListener(EventType.LDFetchGet, LDFetchGetListener);
@@ -252,16 +250,16 @@ function executeQuery(planner: Planner, query: IQuery) {
             .setProfileID("https://hdelva.be/profile/pedestrian")
             .query(query)
             .on("data", (journey: IPath) => {
-                if (!earliestArrivalTime) {
+                if (!queryMetrics["earliestArrivalTime"]) {
                     queryMetrics["firstResultDuration"] = (new Date().getTime() - t0) / 1000;
                 }
 
                 const arrivalTime = journey.getArrivalTime(query);
-                if (!earliestArrivalTime || arrivalTime < earliestArrivalTime) {
-                    earliestArrivalTime = arrivalTime;
+                if (!queryMetrics["earliestArrivalTime"] || arrivalTime < queryMetrics["earliestArrivalTime"]) {
+                    queryMetrics["earliestArrivalTime"] = arrivalTime;
                 }
 
-                if (false) {
+                if (true) {
                     console.log(new Date());
                     console.log(JSON.stringify(journey, null, " "));
                     console.log("\n");
@@ -271,7 +269,6 @@ function executeQuery(planner: Planner, query: IQuery) {
                 queryMetrics["totalDuration"] = (new Date().getTime() - t0) / 1000;
                 queryMetrics["totalScannedPages"] = totalScannedPages;
                 queryMetrics["totalScannedPagesSize"] = totalScannedPagesSize / 1024;
-                queryMetrics["earliestArrivalTime"] = earliestArrivalTime;
 
                 EventBus.getInstance().removeListener(EventType.TiledQuery, tiledQueryListener);
                 EventBus.getInstance().removeListener(EventType.LDFetchGet, LDFetchGetListener);

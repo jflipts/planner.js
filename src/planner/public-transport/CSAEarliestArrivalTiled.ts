@@ -38,7 +38,7 @@ import Path from "../Path";
 
 import { PromiseProxyIterator } from "asynciterator-promiseproxy";
 import TileFetchStrategyExpandingQueryIterator from "./tiles/TileFetchStrategyExpandingQueryIterator";
-import TileFetchStrategyLineQueryIterator from "./tiles/TileFetchStrategyLineQueryIterator";
+import TileFetchStrategyLineMultiQueryIterator from "./tiles/TileFetchStrategyLineMultiQueryIterator";
 
 interface IFinalReachableStops {
   [stop: string]: IReachableStop;
@@ -125,7 +125,7 @@ export default class CSAEarliestArrivalTiled implements IPublicTransportPlanner 
     // Would be better to do this through injection, but AsyncIterator is not injectable
     // This is a workaround
     if (query.tilesFetchStrategy === "straight-line") {
-      this.tilesToFetchIterator = new TileFetchStrategyLineQueryIterator(
+      this.tilesToFetchIterator = new TileFetchStrategyLineMultiQueryIterator(
         this.availablePublicTransportTilesProvider, this.catalog, query);
     } else if (query.tilesFetchStrategy === "expanding") {
       this.tilesToFetchIterator = new TileFetchStrategyExpandingQueryIterator(

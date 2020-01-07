@@ -12,11 +12,12 @@ import Units from "./util/Units";
 
 import fs = require("fs");
 import path = require("path");
+import profile_tree from "./configs/custom_tree";
 import IQuery from "./interfaces/IQuery";
-import IResolvedQuery from "./query-runner/IResolvedQuery";
 
 export default async (logResults: boolean) => {
 
+    // One level
     const catalogNmbsTiledOneLevel = new Catalog();
     catalogNmbsTiledOneLevel.addStopsSource("https://irail.be/stations/NMBS");
     catalogNmbsTiledOneLevel.addConnectionsSource("http://localhost:3000/nmbs-tiled-onelevel/connections/12/{x}/{y}",
@@ -25,6 +26,38 @@ export default async (logResults: boolean) => {
         .addAvailablePublicTransportTilesSource("http://localhost:3000/nmbs-tiled-onelevel/tiles", 12);
 
     const plannerTiledOnelevel = new CustomPlanner(catalogNmbsTiledOneLevel);
+
+    // Multi level
+    const catalogNmbsTiledMultiLevel = new Catalog();
+    catalogNmbsTiledMultiLevel.addStopsSource("https://irail.be/stations/NMBS");
+    catalogNmbsTiledMultiLevel.addConnectionsSource("http://localhost:3000/nmbs-tiled-multilevel/connections/{zoom}/{x}/{y}",
+        TravelMode.Train);
+    catalogNmbsTiledMultiLevel
+        .addAvailablePublicTransportTilesSource("http://localhost:3000/nmbs-tiled-multilevel/tiles");
+
+    const plannerTiledMultilevel = new CustomPlanner(catalogNmbsTiledMultiLevel);
+
+    // One level tree
+    const catalogNmbsTiledOneLevelTree = new Catalog();
+    catalogNmbsTiledOneLevelTree.addStopsSource("https://irail.be/stations/NMBS");
+    catalogNmbsTiledOneLevelTree.addConnectionsSource("http://localhost:3000/nmbs-tiled-onelevel-tree/connections/{zoom}/{x}/{y}",
+        TravelMode.Train);
+    catalogNmbsTiledOneLevelTree
+        .addAvailablePublicTransportTilesSource("http://localhost:3000/nmbs-tiled-onelevel-tree/connections");
+
+    const plannerTiledOnelevelTree = new CustomPlanner(catalogNmbsTiledOneLevelTree, profile_tree);
+
+    // Multi level tree
+    const catalogNmbsTiledMultiLevelTree = new Catalog();
+    catalogNmbsTiledMultiLevelTree.addStopsSource("https://irail.be/stations/NMBS");
+    catalogNmbsTiledMultiLevelTree.addConnectionsSource("http://localhost:3000/nmbs-tiled-multilevel-tree/connections/{zoom}/{x}/{y}",
+        TravelMode.Train);
+    catalogNmbsTiledMultiLevelTree
+        .addAvailablePublicTransportTilesSource("http://localhost:3000/nmbs-tiled-multilevel-tree/connections");
+
+    const plannerTiledMultilevelTree = new CustomPlanner(catalogNmbsTiledMultiLevelTree, profile_tree);
+
+    // Baseline
     const baseLinePlanner = new DelijnNmbsPlanner(); // Delijn removed from catalog
 
     if (logResults) {
@@ -90,7 +123,7 @@ export default async (logResults: boolean) => {
         console.log(`${new Date()} Start query`);
     }
 
-    const queries: IQuery[] = await readQueries("/home/jflipts/Documents/queries-nmbs", 3, new Date(2019, 11, 1));
+    const queries: IQuery[] = await readQueries("/home/jflipts/Documents/queries-nmbs", 3, new Date(2019, 11, 1, 12));
 
     const metricsBaseline = [];
     const metricsStraightLineOneLevel = [];
@@ -100,21 +133,45 @@ export default async (logResults: boolean) => {
     const metricsTreeMultiLevel = [];
 
     for (const query of queries) {
+        // Base case
         await executeQuery(baseLinePlanner, query)
             .then((queryMetrics) => {
                 metricsBaseline.push(queryMetrics);
             });
 
+        // Straight line + One level
         query.tilesFetchStrategy = "straight-line";
         await executeQuery(plannerTiledOnelevel, query)
             .then((queryMetrics) => {
                 metricsStraightLineOneLevel.push(queryMetrics);
             });
 
+        // Straight line + Multi level
+        query.tilesFetchStrategy = "straight-line";
+        await executeQuery(plannerTiledMultilevel, query)
+            .then((queryMetrics) => {
+                metricsStraightLineMultiLevel.push(queryMetrics);
+            });
+
+        // Expanding + One level
         query.tilesFetchStrategy = "expanding";
         await executeQuery(plannerTiledOnelevel, query)
             .then((queryMetrics) => {
                 metricsExpandingOneLevel.push(queryMetrics);
+            });
+
+        // Tree + One level
+        query.tilesFetchStrategy = "tree";
+        await executeQuery(plannerTiledOnelevelTree, query)
+            .then((queryMetrics) => {
+                metricsTreeOneLevel.push(queryMetrics);
+            });
+
+        // Tree + Multi level
+        query.tilesFetchStrategy = "tree";
+        await executeQuery(plannerTiledMultilevelTree, query)
+            .then((queryMetrics) => {
+                metricsTreeMultiLevel.push(queryMetrics);
             });
 
     }
@@ -212,7 +269,8 @@ function executeQuery(planner: Planner, query: IQuery) {
             // This is a workaround as "end" is not called on the Iterator.
             // This should be equal to the number of times the Planner is run per query
             if ((stageNumber === 5 && query.tilesFetchStrategy === "expanding") ||
-                query.tilesFetchStrategy === "straight-line") {
+                query.tilesFetchStrategy === "straight-line" ||
+                query.tilesFetchStrategy === "tree") {
 
                 queryMetrics["totalDuration"] = (new Date().getTime() - t0) / 1000;
                 queryMetrics["totalScannedPages"] = totalScannedPages;
@@ -301,6 +359,7 @@ async function readQueries(folderPath: string, amount: number, dateOfQueries: Da
         queryDate.setFullYear(dateOfQueries.getFullYear());
         queryDate.setMonth(dateOfQueries.getMonth());
         queryDate.setDate(dateOfQueries.getDate());
+        queryDate.setHours(dateOfQueries.getHours());
 
         const queryTemplate = {
             from: query["departure_stop"],

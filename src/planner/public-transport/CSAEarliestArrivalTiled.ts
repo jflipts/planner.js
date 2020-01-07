@@ -39,6 +39,7 @@ import Path from "../Path";
 import { PromiseProxyIterator } from "asynciterator-promiseproxy";
 import TileFetchStrategyExpandingQueryIterator from "./tiles/TileFetchStrategyExpandingQueryIterator";
 import TileFetchStrategyLineMultiQueryIterator from "./tiles/TileFetchStrategyLineMultiQueryIterator";
+import TileFetchStrategyTreeQueryIterator from "./tiles/TileFetchStrategyTreeQueryIterator";
 
 interface IFinalReachableStops {
   [stop: string]: IReachableStop;
@@ -131,7 +132,8 @@ export default class CSAEarliestArrivalTiled implements IPublicTransportPlanner 
       this.tilesToFetchIterator = new TileFetchStrategyExpandingQueryIterator(
         this.availablePublicTransportTilesProvider, this.catalog, query);
     } else if (query.tilesFetchStrategy === "tree") {
-      // TODO
+      this.tilesToFetchIterator = new TileFetchStrategyTreeQueryIterator(
+        this.availablePublicTransportTilesProvider, this.catalog, query);
     } else {
       throw Error("No tilesFetchStrategySpecified");
     }
@@ -167,11 +169,16 @@ export default class CSAEarliestArrivalTiled implements IPublicTransportPlanner 
       tilesToFetch.forEach((value: IPublicTransportTile, _1, _2) => {
         // Hardcoded on first connectionsSource
         const tileCatalog = new Catalog();
-        let { accessUrl } = this.catalog.connectionsSourceConfigs[0];
-        const { travelMode } = this.catalog.connectionsSourceConfigs[0];
-        accessUrl = accessUrl.replace("{zoom}", value.zoom.toString());
-        accessUrl = accessUrl.replace("{x}", value.x.toString());
-        accessUrl = accessUrl.replace("{y}", value.y.toString());
+        const travelMode = this.catalog.connectionsSourceConfigs[0].travelMode;
+        let accessUrl: string;
+        if (value.id) {
+          accessUrl = value.id;
+        } else {
+          accessUrl = this.catalog.connectionsSourceConfigs[0].accessUrl;
+          accessUrl = accessUrl.replace("{zoom}", value.zoom.toString());
+          accessUrl = accessUrl.replace("{x}", value.x.toString());
+          accessUrl = accessUrl.replace("{y}", value.y.toString());
+        }
         tileCatalog.addConnectionsSource(accessUrl, travelMode);
 
         const connectionProvider = new ConnectionsProviderDefault(this.connectionsFetcherFactory, tileCatalog);

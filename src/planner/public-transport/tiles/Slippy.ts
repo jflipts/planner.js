@@ -84,4 +84,39 @@ export default class Slippy {
         }
         return true;
     }
-  }
+
+    public static intersectAabbRay(
+        bbox: { TL: ILocation, TR: ILocation, BL: ILocation, BR: ILocation },
+        line: { x1, y1, x2, y2 },
+    ): boolean {
+
+        let above = 0;
+
+        Object.values(bbox).forEach((element) => {
+            const f = (line.y2 - line.y1) * element.longitude
+                + (line.x1 - line.x2) * element.latitude
+                + (line.x2 * line.y1 - line.x1 * line.y2);
+            if (f === 0) {
+                return true;
+            } else if (f > 0) {
+                above += 1;
+            } else {
+                above -= 1;
+            }
+        });
+
+        if (above === 4 || above === -4) {
+            return false;
+        } else {
+            if (
+                (line.x1 > bbox.TR.longitude && line.x2 > bbox.TR.longitude) ||
+                (line.x1 < bbox.BL.longitude && line.x2 < bbox.BL.longitude) ||
+                (line.y1 > bbox.TR.latitude && line.y2 > bbox.TR.latitude) ||
+                (line.y1 < bbox.BL.latitude && line.y2 < bbox.BL.latitude)
+            ) {
+                return false;
+            }
+        }
+        return true;
+    }
+}

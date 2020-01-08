@@ -169,11 +169,14 @@ export default class TileFetchStrategyExpandingQueryIterator extends AsyncIterat
                 });
             availableTilesPromises.push(tilePromise);
         }
-        Promise.all(availableTilesPromises).then(() => {
-            self.value = this.query;
-            self.value.tilesToFetch = tilesToFetch;
-            self.readable = true;
-        });
+        Promise.all(availableTilesPromises)
+            .then(() => {
+                self.value = this.query;
+                self.value.tilesToFetch = tilesToFetch;
+                self.readable = true;
+            }).catch((err) => {
+                console.log(err);
+            });
 
         return tilesToFetch;
     }

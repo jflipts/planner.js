@@ -112,8 +112,11 @@ export default abstract class Planner {
     query.profileID = this.activeProfileID;
     const iterator = new PromiseProxyIterator(() => this.queryRunner.run(query));
 
-    this.eventBus.once(EventType.AbortQuery, () => {
-      iterator.close();
+    const abortQueryListener = () => { iterator.close(); };
+    this.eventBus.once(EventType.AbortQuery, abortQueryListener);
+
+    iterator.on("end", () => {
+      this.eventBus.removeListener(EventType.AbortQuery, abortQueryListener);
     });
 
     iterator.on("error", (e) => {

@@ -93,6 +93,7 @@ export default async (logResults: boolean) => {
     // Baseline
     const baseLinePlanner = new DelijnNmbsPlanner(); // Delijn removed from catalog
 
+    logResults = false;
     if (logResults) {
         let scannedPages = 0;
         let scannedPagesSize = 0;
@@ -156,7 +157,7 @@ export default async (logResults: boolean) => {
         console.log(`${new Date()} Start query`);
     }
 
-    const queries: IQuery[] = await readQueries("/home/jflipts/Documents/queries-nmbs", 3, new Date(2019, 11, 1, 12));
+    const queries: IQuery[] = await readQueries("/home/jflipts/Documents/queries-nmbs", 100, new Date(2019, 11, 1, 12));
 
     const metricsBaseline: IResultMetics[] = [];
     const metricsStraightLineOneLevel: IResultMetics[] = [];
@@ -165,47 +166,58 @@ export default async (logResults: boolean) => {
     const metricsTreeOneLevel: IResultMetics[] = [];
     const metricsTreeMultiLevel: IResultMetics[] = [];
 
-    for (const query of queries) {
+    const testQueries = [{ // Query that fails on one levels and makes improvement on multilevel
+        from: "http://irail.be/stations/NMBS/008814001",
+        to: "http://irail.be/stations/NMBS/008881000",
+        minimumDepartureTime: new Date(2019, 11, 1, 12, 34, 2),
+        maximumTransferDuration: 1800000,
+    }];
+
+    for (const [ix, query] of queries.entries()) {
+        console.log("Query: " + ix);
+
         // Base case
-        await executeQuery(baseLinePlanner, query)
+        await executeQuery(new DelijnNmbsPlanner(), query)
             .then((queryMetrics) => {
                 metricsBaseline.push(queryMetrics);
             });
 
         // Straight line + One level
         query.tilesFetchStrategy = "straight-line";
-        await executeQuery(plannerTiledOnelevel, query)
+        await executeQuery(new CustomPlanner(catalogNmbsTiledOneLevel), query)
             .then((queryMetrics) => {
                 metricsStraightLineOneLevel.push(queryMetrics);
             });
 
         // Straight line + Multi level
         query.tilesFetchStrategy = "straight-line";
-        await executeQuery(plannerTiledMultilevel, query)
+        await executeQuery(new CustomPlanner(catalogNmbsTiledMultiLevel), query)
             .then((queryMetrics) => {
                 metricsStraightLineMultiLevel.push(queryMetrics);
             });
 
         // Expanding + One level
         query.tilesFetchStrategy = "expanding";
-        await executeQuery(plannerTiledOnelevel, query)
+        await executeQuery(new CustomPlanner(catalogNmbsTiledOneLevel), query)
             .then((queryMetrics) => {
                 metricsExpandingOneLevel.push(queryMetrics);
             });
 
         // Tree + One level
         query.tilesFetchStrategy = "tree";
-        await executeQuery(plannerTiledOnelevelTree, query)
+        await executeQuery(new CustomPlanner(catalogNmbsTiledOneLevelTree, profile_tree), query)
             .then((queryMetrics) => {
                 metricsTreeOneLevel.push(queryMetrics);
             });
 
         // Tree + Multi level
         query.tilesFetchStrategy = "tree";
-        await executeQuery(plannerTiledMultilevelTree, query)
+        await executeQuery(new CustomPlanner(catalogNmbsTiledMultiLevelTree, profile_tree), query)
             .then((queryMetrics) => {
                 metricsTreeMultiLevel.push(queryMetrics);
             });
+
+        console.log("\n");
     }
 
     // wait 15 seconds to make sure everyting settled
@@ -228,9 +240,19 @@ export default async (logResults: boolean) => {
         statsTreeMultiLevel,
     ]);
 
-    await csv.toDisk("/home/jflipts/Documents/planner-output/" + new Date().toISOString() + ".csv");
+    await csv.toDisk(
+        "/home/jflipts/Documents/planner-output/" + new Date().toISOString() + ".csv",
+        { allColumns: true, header: true },
+    );
+
+    console.log("Finished succesfully");
 };
 
+/**
+ * Execute a single query on the specified planner and return a ResultMetrics object
+ * @param planner
+ * @param query
+ */
 function executeQuery(planner: Planner, query: IQuery): Promise<IResultMetics> {
     return new Promise((resolve, reject) => {
         let stageNumber = 1;
@@ -262,19 +284,6 @@ function executeQuery(planner: Planner, query: IQuery): Promise<IResultMetics> {
 
             if (!queryMetrics.totalScannedTiles) { queryMetrics.totalScannedTiles = 0; }
             queryMetrics.totalScannedTiles += numberOfTiles;
-
-            // This is a workaround as "end" is not called on the Iterator.
-            // This should be equal to the number of times the Planner is run per query
-            if ((stageNumber === 5 && query.tilesFetchStrategy === "expanding") ||
-                query.tilesFetchStrategy === "straight-line" ||
-                query.tilesFetchStrategy === "tree") {
-
-                queryMetrics.totalDuration = (new Date().getTime() - t0) / 1000;
-
-                EventBus.getInstance().removeListener(EventType.TiledQuery, tiledQueryListener);
-                EventBus.getInstance().removeListener(EventType.LDFetchGet, LDFetchGetListener);
-                resolve(queryMetrics);
-            }
 
             stageNumber++;
             stageStartTime = new Date();
@@ -336,7 +345,7 @@ function executeQuery(planner: Planner, query: IQuery): Promise<IResultMetics> {
 
                 // console.log(JSON.stringify(journey, null, " "));
             })
-            .on("end", () => { // Gets called on CSAEarliestArrival
+            .on("end", () => {
                 queryMetrics.totalDuration = (new Date().getTime() - t0) / 1000;
 
                 EventBus.getInstance().removeListener(EventType.TiledQuery, tiledQueryListener);
@@ -415,7 +424,7 @@ function computeStastics(
 
     // Query time first result
     const queryTimesFR: number[] = queryMetrics
-        .filter((i) => i !== undefined)
+        .filter((i) => i.firstResultDuration !== undefined)
         .map((x) => x.firstResultDuration);
     statistics.duration_firstResult_005 = percentile(queryTimesFR, 0.05);
     statistics.duration_firstResult_025 = percentile(queryTimesFR, 0.25);
@@ -427,7 +436,7 @@ function computeStastics(
 
     // Query time best result
     const queryTimesBest: number[] = queryMetrics
-        .filter((i) => i !== undefined)
+        .filter((i) => i.bestResultDuration !== undefined)
         .map((x) => x.bestResultDuration);
     statistics.duration_bestResult_005 = percentile(queryTimesBest, 0.05);
     statistics.duration_bestResult_025 = percentile(queryTimesBest, 0.25);
@@ -439,11 +448,11 @@ function computeStastics(
 
     // Accuracy first result
     const firstEarliestArrivalTimes: number[] = queryMetrics.map((x) => {
-        if (x.firstEarliestArrivalTime) { return x.firstEarliestArrivalTime.getTime(); }
+        if (x.firstEarliestArrivalTime) { return x.firstEarliestArrivalTime.getTime() / 1000; }
         return undefined;
     });
     const firstEarliestArrivalTimesBase: number[] = baseMetrics.map((x) => {
-        if (x.firstEarliestArrivalTime) { return x.firstEarliestArrivalTime.getTime(); }
+        if (x.firstEarliestArrivalTime) { return x.firstEarliestArrivalTime.getTime() / 1000; }
         return undefined;
     });
     const differenceFirstEarliestArrivalTimes: number[] = firstEarliestArrivalTimes
@@ -452,27 +461,29 @@ function computeStastics(
         .filter((i) => i === 0).length / queryMetrics.length;
     statistics.accuracy_firstEA_10 = differenceFirstEarliestArrivalTimes
         .filter((i) => i <= 1000 * 60 * 10).length / queryMetrics.length;
-    const differenceFirstEarliestArrivalTimesNoNan: number[] = firstEarliestArrivalTimes
-        .filter((i) => i !== undefined)
-        .map((val, ix) => val - firstEarliestArrivalTimesBase[ix]);
+    // Accuracy first result excluding NaN
+    const differenceFirstEarliestArrivalTimesNoNan: number[] = differenceFirstEarliestArrivalTimes
+        .filter((i) => !isNaN(i));
     statistics.accuracy_firstEA_NoNan = differenceFirstEarliestArrivalTimesNoNan
-        .filter((i) => i === 0).length / queryMetrics.length;
+        .filter((i) => i === 0).length / differenceFirstEarliestArrivalTimesNoNan.length || 0;
     statistics.accuracy_firstEA_NoNan_10 = differenceFirstEarliestArrivalTimesNoNan
-        .filter((i) => i <= 1000 * 60 * 10).length / queryMetrics.length;
+        .filter((i) => i <= 1000 * 60 * 10).length / differenceFirstEarliestArrivalTimesNoNan.length || 0;
+    // Mean and deviation always exclude NaN
     statistics.accuracy_firstEA_mean = mean(differenceFirstEarliestArrivalTimesNoNan);
     statistics.accuracy_firstEA_deviation = deviation(differenceFirstEarliestArrivalTimesNoNan);
 
+    // Count NaN
     const differenceFirstEarliestArrivalTimesNan: number[] = firstEarliestArrivalTimes
         .filter((i) => i === undefined);
     statistics.count_noResult = differenceFirstEarliestArrivalTimesNan.length;
 
     // Accuracy best result
     const bestEarliestArrivalTimes: number[] = queryMetrics.map((x) => {
-        if (x.bestEarliestArrivalTime) { return x.bestEarliestArrivalTime.getTime(); }
+        if (x.bestEarliestArrivalTime) { return x.bestEarliestArrivalTime.getTime() / 1000; }
         return undefined;
     });
     const bestEarliestArrivalTimesBase: number[] = baseMetrics.map((x) => {
-        if (x.bestEarliestArrivalTime) { return x.bestEarliestArrivalTime.getTime(); }
+        if (x.bestEarliestArrivalTime) { return x.bestEarliestArrivalTime.getTime() / 1000; }
         return undefined;
     });
     const differenceBestEarliestArrivalTimes: number[] = bestEarliestArrivalTimes
@@ -481,13 +492,14 @@ function computeStastics(
         .filter((i) => i === 0).length / queryMetrics.length;
     statistics.accuracy_bestEA_10 = differenceBestEarliestArrivalTimes
         .filter((i) => i <= 1000 * 60 * 10).length / queryMetrics.length;
-    const differenceBestEarliestArrivalTimesNoNan: number[] = bestEarliestArrivalTimes
-        .filter((i) => i !== undefined)
-        .map((val, ix) => val - bestEarliestArrivalTimesBase[ix]);
+    // Accuracy best result excluding NaN
+    const differenceBestEarliestArrivalTimesNoNan: number[] = differenceBestEarliestArrivalTimes
+        .filter((i) => !isNaN(i));
     statistics.accuracy_bestEA_NoNan = differenceBestEarliestArrivalTimesNoNan
-        .filter((i) => i === 0).length / queryMetrics.length;
+        .filter((i) => i === 0).length / differenceBestEarliestArrivalTimesNoNan.length || 0;
     statistics.accuracy_bestEA_NoNan_10 = differenceBestEarliestArrivalTimesNoNan
-        .filter((i) => i <= 1000 * 60 * 10).length / queryMetrics.length;
+        .filter((i) => i <= 1000 * 60 * 10).length / differenceBestEarliestArrivalTimesNoNan.length || 0;
+    // Mean and deviation always exclude NaN
     statistics.accuracy_bestEA_mean = mean(differenceBestEarliestArrivalTimesNoNan);
     statistics.accuracy_bestEA_deviation = deviation(differenceBestEarliestArrivalTimesNoNan);
 
@@ -581,11 +593,13 @@ function percentile(arr: number[], p: number) {
 }
 
 function mean(arr: number[]): number {
+    if (arr.length === 0) { return undefined; }
     const sum = arr.reduce((a, b) => a + b);
     return sum / arr.length;
 }
 
 function deviation(arr: number[]): number {
+    if (arr.length === 0) { return undefined; }
     const avg = mean(arr);
     const squareDiffs = arr.map((value) => Math.pow(value - avg, 2));
     return Math.sqrt(mean(squareDiffs));

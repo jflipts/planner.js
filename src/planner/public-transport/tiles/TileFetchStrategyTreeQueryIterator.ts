@@ -52,7 +52,7 @@ export default class TileFetchStrategyTreeQueryIterator extends AsyncIterator<IR
         }
 
         // Maximum number of times the Iterator should return a readable value
-        if (this.readQueryCounter > 1) {
+        if (this.readQueryCounter > 0) {
             this.close();
             return null;
         }

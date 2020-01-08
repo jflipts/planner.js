@@ -33,6 +33,7 @@ export default class FlatMapIterator<Q, R> extends AsyncIterator<R> {
 
     this.queryIterator.once("end", () => {
       this.isLastResultIterator = true;
+      this.readable = true;
     });
 
     this.readable = true;
@@ -48,7 +49,8 @@ export default class FlatMapIterator<Q, R> extends AsyncIterator<R> {
 
       if (query) {
         this.runQuery(query);
-
+      } else if (this.isLastResultIterator) {
+        this.close();
       } else {
         this.readable = false;
         this.queryIterator.once("readable", () => {

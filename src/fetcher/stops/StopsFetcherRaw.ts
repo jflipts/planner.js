@@ -103,7 +103,7 @@ export default class StopsFetcherRaw implements IStopsFetcher {
         }
 
         const duration = (new Date()).getTime() - beginTime.getTime();
-        EventBus.getInstance().emit(EventType.LDFetchGet, url, duration);
+        EventBus.getInstance().emit(EventType.LDFetchGet, url, duration, "stops");
 
         return stops;
     }

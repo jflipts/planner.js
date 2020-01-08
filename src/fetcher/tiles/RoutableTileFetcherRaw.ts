@@ -70,7 +70,7 @@ export default class RoutableTileFetcherRaw implements IRoutableTileFetcher {
       }
 
       const duration = (new Date()).getTime() - beginTime.getTime();
-      EventBus.getInstance().emit(EventType.LDFetchGet, url, duration);
+      EventBus.getInstance().emit(EventType.LDFetchGet, url, duration, "routable-tile");
 
       return this.processTileData(url, nodes, ways);
     } else {

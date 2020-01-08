@@ -1,3 +1,4 @@
+import ObjectsToCSV from "objects-to-csv";
 import {
     BasicTrainPlanner, CustomPlanner,
     DelijnNmbsPlanner, TravelMode,
@@ -14,6 +15,38 @@ import fs = require("fs");
 import path = require("path");
 import profile_tree from "./configs/custom_tree";
 import IQuery from "./interfaces/IQuery";
+
+// Sizes in Bytes, durations in seconds
+interface IResultMetics {
+    query: IQuery;
+    firstEarliestArrivalTime?: Date;
+    bestEarliestArrivalTime?: Date;
+    firstResultDuration?: number;
+    bestResultDuration?: number;
+
+    totalDuration: number;
+    totalSize: number;
+    totalScannedPages: number;
+    totalScannedPagesSize: number;
+
+    totalScannedTiles?: number;
+    totalScannedInternalNodes?: number;
+    totalScannedInternalNodesSize?: number;
+
+    stages?: IStageMetrics[];
+}
+
+interface IStageMetrics {
+    stage: number;
+    duration: number;
+    scannedTiles: number;
+    scannedPages: number;
+    scannedPagesSize: number;
+
+    earliestArrivalTime?: Date;
+    scannedInternalNodes?: number;
+    scannedInternalNodesSize?: number;
+}
 
 export default async (logResults: boolean) => {
 
@@ -67,7 +100,7 @@ export default async (logResults: boolean) => {
 
         const eventBus = EventBus.getInstance();
 
-        const logFetch = true; // Log urls
+        const logFetch = false; // Log urls
 
         if (logResults) {
             console.log(`${new Date()} Start prefetch`);
@@ -99,8 +132,8 @@ export default async (logResults: boolean) => {
                 console.log("[Subquery]", minimumDepartureTime, maximumArrivalTime,
                     maximumArrivalTime - minimumDepartureTime);
             })
-            .on(EventType.LDFetchGet, (url: string, duration, size?: number) => {
-                if (url.includes("connections")) {
+            .on(EventType.LDFetchGet, (url: string, duration, size?: number, type?: string) => {
+                if (type === "leaf" || type === "connections") {
                     scannedPages++;
                     if (size) {
                         scannedPagesSize += size;
@@ -125,12 +158,12 @@ export default async (logResults: boolean) => {
 
     const queries: IQuery[] = await readQueries("/home/jflipts/Documents/queries-nmbs", 3, new Date(2019, 11, 1, 12));
 
-    const metricsBaseline = [];
-    const metricsStraightLineOneLevel = [];
-    const metricsStraightLineMultiLevel = [];
-    const metricsExpandingOneLevel = [];
-    const metricsTreeOneLevel = [];
-    const metricsTreeMultiLevel = [];
+    const metricsBaseline: IResultMetics[] = [];
+    const metricsStraightLineOneLevel: IResultMetics[] = [];
+    const metricsStraightLineMultiLevel: IResultMetics[] = [];
+    const metricsExpandingOneLevel: IResultMetics[] = [];
+    const metricsTreeOneLevel: IResultMetics[] = [];
+    const metricsTreeMultiLevel: IResultMetics[] = [];
 
     for (const query of queries) {
         // Base case
@@ -173,98 +206,62 @@ export default async (logResults: boolean) => {
             .then((queryMetrics) => {
                 metricsTreeMultiLevel.push(queryMetrics);
             });
-
     }
 
-    const amount = 2;
+    // wait 15 seconds to make sure everyting settled
+    await new Promise((resolve) => setTimeout(resolve, 1000 * 15));
 
-    plannerTiledOnelevel
-        .setProfileID("https://hdelva.be/profile/pedestrian")
-        .query({
-            // roadNetworkOnly: true,
-            // from: "https://data.delijn.be/stops/201657",
-            // to: "https://data.delijn.be/stops/205910",
-            // from: "https://data.delijn.be/stops/200455", // Deinze weg op Grammene +456
-            // to: "https://data.delijn.be/stops/502481", // Tielt Metaalconstructie Goossens
-            // from: "https://data.delijn.be/stops/509927", // Tield Rameplein perron 1
-            // to: "https://data.delijn.be/stops/200455", // Deinze weg op Grammene +456
-            // from: "Ingelmunster", // Ingelmunster
-            // to: "http://irail.be/stations/NMBS/008892007", // Ghent-Sint-Pieters
-            // from: { latitude: 50.93278, longitude: 5.32665 }, // Pita Aladin, Hasselt
-            // to: { latitude: 50.7980187, longitude: 3.1877779 }, // Burger Pita Pasta, Menen
-            // from: "Hasselt",
-            // to: "Kortrijk",
-            // from: "https://data.nmbs.be/stops/8894755",
-            // to: "https://data.nmbs.be/stops/8894748",
+    const statsBaseline = computeStastics(metricsBaseline, "baseline", metricsBaseline);
+    const statsStraightOneLevel = computeStastics(metricsStraightLineOneLevel, "straight-one-level", metricsBaseline);
+    const statsStraightMultiLevel
+        = computeStastics(metricsStraightLineMultiLevel, "straight-multi-level", metricsBaseline);
+    const statsExpandingOneLevel = computeStastics(metricsExpandingOneLevel, "expanding-one-level", metricsBaseline);
+    const statsTreeOneLevel = computeStastics(metricsTreeOneLevel, "tree-one-level", metricsBaseline);
+    const statsTreeMultiLevel = computeStastics(metricsTreeMultiLevel, "tree-multi-level", metricsBaseline);
 
-            // Case: 1 connection; start and end inside same tile (12/64/1389)
-            // from: "http://irail.be/stations/NMBS/008865110",
-            // to: "http://irail.be/stations/NMBS/008865128",
+    const csv = new ObjectsToCSV([
+        statsBaseline,
+        statsStraightOneLevel,
+        statsStraightMultiLevel,
+        statsExpandingOneLevel,
+        statsTreeOneLevel,
+        statsTreeMultiLevel,
+    ]);
 
-            // Case: 1 connection; start and end tile with 2 nonexisting tiles in between
-            // from: "Brugge", // (12/2084/1367)
-            // to: "http://irail.be/stations/NMBS/008891702", // Oostende (12/2081/1367)
-
-            // Case: 1 connection; 3 adjacent tiles
-            // from: "Brugge", // (12/2084/1367)
-            // to: "Oostkamp", // (12/2085/1368)
-
-            // Case: 1 or 2 connections; lot of adjacent tiles that are not needed
-            // from: "Brugge",
-            // to: "http://irail.be/stations/NMBS/008892007", // Ghent-Sint-Pieters
-
-            // Case: 5 or 6 connections; not on a straight line so correct tiles are not fetched
-            from: "Brugge",
-            to: "Leuven",
-
-            minimumDepartureTime: new Date(2019, 11, 1), // 1 December 2019...
-            maximumTransferDuration: Units.fromMinutes(30),
-        })
-        .take(amount)
-        .on("error", (error) => {
-            console.log(error);
-        })
-        .on("data", (journey: IPath) => {
-
-            if (logResults) {
-                console.log(new Date());
-                console.log(JSON.stringify(journey, null, " "));
-                console.log("\n");
-            }
-        })
-        .on("end", () => {
-            console.log(`${new Date()} Finish query`);
-        });
-
+    await csv.toDisk("/home/jflipts/Documents/planner-output/" + new Date().toISOString() + ".csv");
 };
 
-/* tslint:disable:no-string-literal */
-
-function executeQuery(planner: Planner, query: IQuery) {
+function executeQuery(planner: Planner, query: IQuery): Promise<IResultMetics> {
     return new Promise((resolve, reject) => {
         let stageNumber = 1;
+        let stageStartTime = new Date();
         let stageScannedPages = 0;
         let stageScannedPagesSize = 0;
-        let totalScannedPages = 0;
-        let totalScannedPagesSize = 0;
-        const queryMetrics = {
+
+        const queryMetrics: IResultMetics = {
             query,
+            totalDuration: undefined,
+            totalSize: 0,
+            totalScannedPages: 0,
+            totalScannedPagesSize: 0,
             stages: [],
         };
 
-        // Listeners need to be removed afterwards
+        // Creation of new stage and alterantive ending
         const tiledQueryListener = (resolvedQuery: IResolvedQueryTiled) => {
             const numberOfTiles = resolvedQuery.tilesToFetch.size;
-            const stage = {
+            const duration = (new Date().getTime() - stageStartTime.getTime()) / 1000;
+            const stage: IStageMetrics = {
                 stage: stageNumber,
+                duration,
                 scannedTiles: numberOfTiles,
                 scannedPages: stageScannedPages,
-                scannedPagesSize: stageScannedPagesSize / 1024,
+                scannedPagesSize: stageScannedPagesSize,
             };
             queryMetrics.stages.push(stage);
 
-            stageScannedPages = 0;
-            stageScannedPagesSize = 0;
+            if (!queryMetrics.totalScannedTiles) { queryMetrics.totalScannedTiles = 0; }
+            queryMetrics.totalScannedTiles += numberOfTiles;
 
             // This is a workaround as "end" is not called on the Iterator.
             // This should be equal to the number of times the Planner is run per query
@@ -272,9 +269,7 @@ function executeQuery(planner: Planner, query: IQuery) {
                 query.tilesFetchStrategy === "straight-line" ||
                 query.tilesFetchStrategy === "tree") {
 
-                queryMetrics["totalDuration"] = (new Date().getTime() - t0) / 1000;
-                queryMetrics["totalScannedPages"] = totalScannedPages;
-                queryMetrics["totalScannedPagesSize"] = totalScannedPagesSize / 1024;
+                queryMetrics.totalDuration = (new Date().getTime() - t0) / 1000;
 
                 EventBus.getInstance().removeListener(EventType.TiledQuery, tiledQueryListener);
                 EventBus.getInstance().removeListener(EventType.LDFetchGet, LDFetchGetListener);
@@ -282,23 +277,41 @@ function executeQuery(planner: Planner, query: IQuery) {
             }
 
             stageNumber++;
+            stageStartTime = new Date();
+            stageScannedPages = 0;
+            stageScannedPagesSize = 0;
         };
 
-        const LDFetchGetListener = (url: string, duration, size?: number) => {
-            if (url.includes("connections")) {
+        // Updates to fetchcounters and fetch sizes
+        const LDFetchGetListener = (url: string, duration, size?: number, type?: string) => {
+            if (type === "leaf" || type === "connections") {
+                queryMetrics.totalScannedPages++;
                 stageScannedPages++;
-                totalScannedPages++;
 
                 if (size) {
                     stageScannedPagesSize += +size;
-                    totalScannedPagesSize += +size;
+                    queryMetrics.totalScannedPagesSize += +size;
+                    queryMetrics.totalSize += +size;
                 }
-            }
-            if (url.includes("tiles") && size) {
-                queryMetrics["tiles"] = size / 1024;
+
+            } else if (type === "internal-node") {
+                if (!queryMetrics.totalScannedInternalNodes) {
+                    queryMetrics.totalScannedInternalNodes = 0;
+                    queryMetrics.totalScannedInternalNodesSize = 0;
+                }
+                queryMetrics.totalScannedInternalNodes++;
+                if (size) {
+                    queryMetrics.totalScannedInternalNodesSize += size;
+                    queryMetrics.totalSize += +size;
+                }
+            } else if (type === "available-tiles") {
+                if (size) {
+                    queryMetrics.totalSize += +size;
+                }
             }
         };
 
+        // Add listeners, listeners need to be removed afterwards
         EventBus.getInstance()
             .on(EventType.TiledQuery, tiledQueryListener)
             .on(EventType.LDFetchGet, LDFetchGetListener);
@@ -308,25 +321,23 @@ function executeQuery(planner: Planner, query: IQuery) {
             .setProfileID("https://hdelva.be/profile/pedestrian")
             .query(query)
             .on("data", (journey: IPath) => {
-                if (!queryMetrics["earliestArrivalTime"]) {
-                    queryMetrics["firstResultDuration"] = (new Date().getTime() - t0) / 1000;
-                }
-
+                // Updates to arrival times
                 const arrivalTime = journey.getArrivalTime(query);
-                if (!queryMetrics["earliestArrivalTime"] || arrivalTime < queryMetrics["earliestArrivalTime"]) {
-                    queryMetrics["earliestArrivalTime"] = arrivalTime;
+                const dataTime = (new Date().getTime() - t0) / 1000;
+                if (!queryMetrics.firstEarliestArrivalTime) {
+                    queryMetrics.firstResultDuration = dataTime;
+                    queryMetrics.firstEarliestArrivalTime = arrivalTime;
+                    queryMetrics.bestResultDuration = dataTime;
+                    queryMetrics.bestEarliestArrivalTime = arrivalTime;
+                } else if (arrivalTime < queryMetrics.bestEarliestArrivalTime) {
+                    queryMetrics.bestResultDuration = dataTime;
+                    queryMetrics.bestEarliestArrivalTime = arrivalTime;
                 }
 
-                if (true) {
-                    console.log(new Date());
-                    console.log(JSON.stringify(journey, null, " "));
-                    console.log("\n");
-                }
+                // console.log(JSON.stringify(journey, null, " "));
             })
             .on("end", () => { // Gets called on CSAEarliestArrival
-                queryMetrics["totalDuration"] = (new Date().getTime() - t0) / 1000;
-                queryMetrics["totalScannedPages"] = totalScannedPages;
-                queryMetrics["totalScannedPagesSize"] = totalScannedPagesSize / 1024;
+                queryMetrics.totalDuration = (new Date().getTime() - t0) / 1000;
 
                 EventBus.getInstance().removeListener(EventType.TiledQuery, tiledQueryListener);
                 EventBus.getInstance().removeListener(EventType.LDFetchGet, LDFetchGetListener);
@@ -345,6 +356,7 @@ function executeQuery(planner: Planner, query: IQuery) {
  * @param amount
  * @param dateOfQueries
  */
+/* tslint:disable:no-string-literal */
 async function readQueries(folderPath: string, amount: number, dateOfQueries: Date = new Date()) {
     const fileNames = fs.readdirSync(folderPath);
 
@@ -374,3 +386,207 @@ async function readQueries(folderPath: string, amount: number, dateOfQueries: Da
     return queries;
 }
 /* tslint:enable:no-string-literal */
+
+/**
+ * Computes a lot of statistics for a set of results
+ *
+ * @param queryMetrics
+ * @param queryType
+ * @param baseMetrics: metrics to calculate accuracy on
+ */
+function computeStastics(
+    queryMetrics: IResultMetics[],
+    queryType: string,
+    baseMetrics: IResultMetics[],
+): { [k: string]: any } {
+    const statistics: { [k: string]: any } = {
+        queryType,
+    };
+
+    // Query time
+    const queryTimes: number[] = queryMetrics.map((x) => x.totalDuration);
+    statistics.duration_total_005 = percentile(queryTimes, 0.05);
+    statistics.duration_total_025 = percentile(queryTimes, 0.25);
+    statistics.duration_total_050 = percentile(queryTimes, 0.50);
+    statistics.duration_total_075 = percentile(queryTimes, 0.75);
+    statistics.duration_total_095 = percentile(queryTimes, 0.95);
+    statistics.duration_total_mean = mean(queryTimes);
+    statistics.duration_total_deviation = deviation(queryTimes);
+
+    // Query time first result
+    const queryTimesFR: number[] = queryMetrics
+        .filter((i) => i !== undefined)
+        .map((x) => x.firstResultDuration);
+    statistics.duration_firstResult_005 = percentile(queryTimesFR, 0.05);
+    statistics.duration_firstResult_025 = percentile(queryTimesFR, 0.25);
+    statistics.duration_firstResult_050 = percentile(queryTimesFR, 0.50);
+    statistics.duration_firstResult_075 = percentile(queryTimesFR, 0.75);
+    statistics.duration_firstResult_095 = percentile(queryTimesFR, 0.95);
+    statistics.duration_firstResult_mean = mean(queryTimesFR);
+    statistics.duration_firstResult_deviation = deviation(queryTimesFR);
+
+    // Query time best result
+    const queryTimesBest: number[] = queryMetrics
+        .filter((i) => i !== undefined)
+        .map((x) => x.bestResultDuration);
+    statistics.duration_bestResult_005 = percentile(queryTimesBest, 0.05);
+    statistics.duration_bestResult_025 = percentile(queryTimesBest, 0.25);
+    statistics.duration_bestResult_050 = percentile(queryTimesBest, 0.50);
+    statistics.duration_bestResult_075 = percentile(queryTimesBest, 0.75);
+    statistics.duration_bestResult_095 = percentile(queryTimesBest, 0.95);
+    statistics.duration_bestResult_mean = mean(queryTimesBest);
+    statistics.duration_bestResult_deviation = deviation(queryTimesBest);
+
+    // Accuracy first result
+    const firstEarliestArrivalTimes: number[] = queryMetrics.map((x) => {
+        if (x.firstEarliestArrivalTime) { return x.firstEarliestArrivalTime.getTime(); }
+        return undefined;
+    });
+    const firstEarliestArrivalTimesBase: number[] = baseMetrics.map((x) => {
+        if (x.firstEarliestArrivalTime) { return x.firstEarliestArrivalTime.getTime(); }
+        return undefined;
+    });
+    const differenceFirstEarliestArrivalTimes: number[] = firstEarliestArrivalTimes
+        .map((val, ix) => val - firstEarliestArrivalTimesBase[ix]);
+    statistics.accuracy_firstEA = differenceFirstEarliestArrivalTimes
+        .filter((i) => i === 0).length / queryMetrics.length;
+    statistics.accuracy_firstEA_10 = differenceFirstEarliestArrivalTimes
+        .filter((i) => i <= 1000 * 60 * 10).length / queryMetrics.length;
+    const differenceFirstEarliestArrivalTimesNoNan: number[] = firstEarliestArrivalTimes
+        .filter((i) => i !== undefined)
+        .map((val, ix) => val - firstEarliestArrivalTimesBase[ix]);
+    statistics.accuracy_firstEA_NoNan = differenceFirstEarliestArrivalTimesNoNan
+        .filter((i) => i === 0).length / queryMetrics.length;
+    statistics.accuracy_firstEA_NoNan_10 = differenceFirstEarliestArrivalTimesNoNan
+        .filter((i) => i <= 1000 * 60 * 10).length / queryMetrics.length;
+    statistics.accuracy_firstEA_mean = mean(differenceFirstEarliestArrivalTimesNoNan);
+    statistics.accuracy_firstEA_deviation = deviation(differenceFirstEarliestArrivalTimesNoNan);
+
+    const differenceFirstEarliestArrivalTimesNan: number[] = firstEarliestArrivalTimes
+        .filter((i) => i === undefined);
+    statistics.count_noResult = differenceFirstEarliestArrivalTimesNan.length;
+
+    // Accuracy best result
+    const bestEarliestArrivalTimes: number[] = queryMetrics.map((x) => {
+        if (x.bestEarliestArrivalTime) { return x.bestEarliestArrivalTime.getTime(); }
+        return undefined;
+    });
+    const bestEarliestArrivalTimesBase: number[] = baseMetrics.map((x) => {
+        if (x.bestEarliestArrivalTime) { return x.bestEarliestArrivalTime.getTime(); }
+        return undefined;
+    });
+    const differenceBestEarliestArrivalTimes: number[] = bestEarliestArrivalTimes
+        .map((val, ix) => val - bestEarliestArrivalTimesBase[ix]);
+    statistics.accuracy_bestEA = differenceBestEarliestArrivalTimes
+        .filter((i) => i === 0).length / queryMetrics.length;
+    statistics.accuracy_bestEA_10 = differenceBestEarliestArrivalTimes
+        .filter((i) => i <= 1000 * 60 * 10).length / queryMetrics.length;
+    const differenceBestEarliestArrivalTimesNoNan: number[] = bestEarliestArrivalTimes
+        .filter((i) => i !== undefined)
+        .map((val, ix) => val - bestEarliestArrivalTimesBase[ix]);
+    statistics.accuracy_bestEA_NoNan = differenceBestEarliestArrivalTimesNoNan
+        .filter((i) => i === 0).length / queryMetrics.length;
+    statistics.accuracy_bestEA_NoNan_10 = differenceBestEarliestArrivalTimesNoNan
+        .filter((i) => i <= 1000 * 60 * 10).length / queryMetrics.length;
+    statistics.accuracy_bestEA_mean = mean(differenceBestEarliestArrivalTimesNoNan);
+    statistics.accuracy_bestEA_deviation = deviation(differenceBestEarliestArrivalTimesNoNan);
+
+    // Total size
+    const querySize: number[] = queryMetrics.map((x) => x.totalSize / 1024);
+    statistics.size_total_005 = percentile(querySize, 0.05);
+    statistics.size_total_025 = percentile(querySize, 0.25);
+    statistics.size_total_050 = percentile(querySize, 0.50);
+    statistics.size_total_075 = percentile(querySize, 0.75);
+    statistics.size_total_095 = percentile(querySize, 0.95);
+    statistics.size_total_mean = mean(querySize);
+    statistics.size_total_deviation = deviation(querySize);
+
+    // # Scanned pages
+    const pagesScanned: number[] = queryMetrics.map((x) => x.totalScannedPages);
+    statistics.count_scannedPages_005 = percentile(pagesScanned, 0.05);
+    statistics.count_scannedPages_025 = percentile(pagesScanned, 0.25);
+    statistics.count_scannedPages_050 = percentile(pagesScanned, 0.50);
+    statistics.count_scannedPages_075 = percentile(pagesScanned, 0.75);
+    statistics.count_scannedPages_095 = percentile(pagesScanned, 0.95);
+    statistics.count_scannedPages_mean = mean(pagesScanned);
+    statistics.count_scannedPages_deviation = deviation(pagesScanned);
+
+    // Scanned pages size
+    const pagesScannedSize: number[] = queryMetrics.map((x) => x.totalScannedPagesSize / 1024);
+    statistics.size_scannedPages_005 = percentile(pagesScannedSize, 0.05);
+    statistics.size_scannedPages_025 = percentile(pagesScannedSize, 0.25);
+    statistics.size_scannedPages_050 = percentile(pagesScannedSize, 0.50);
+    statistics.size_scannedPages_075 = percentile(pagesScannedSize, 0.75);
+    statistics.size_scannedPages_095 = percentile(pagesScannedSize, 0.95);
+    statistics.size_scannedPages_mean = mean(pagesScannedSize);
+    statistics.size_scannedPages_deviation = deviation(pagesScannedSize);
+
+    // # Scanned tiles
+    if (queryMetrics[0].totalScannedTiles) {
+        const tilesScanned: number[] = queryMetrics.map((x) => x.totalScannedTiles);
+        statistics.count_scannedTiles_005 = percentile(tilesScanned, 0.05);
+        statistics.count_scannedTiles_025 = percentile(tilesScanned, 0.25);
+        statistics.count_scannedTiles_050 = percentile(tilesScanned, 0.50);
+        statistics.count_scannedTiles_075 = percentile(tilesScanned, 0.75);
+        statistics.count_scannedTiles_095 = percentile(tilesScanned, 0.95);
+        statistics.count_scannedTiles_mean = mean(tilesScanned);
+        statistics.count_scannedTiles_deviation = deviation(tilesScanned);
+    }
+
+    if (queryMetrics[0].totalScannedInternalNodes) {
+        // # Scanned internalNodes
+        const internalNodesScanned: number[] = queryMetrics.map((x) => x.totalScannedInternalNodes);
+        statistics.count_scannedInternalNodes_005 = percentile(internalNodesScanned, 0.05);
+        statistics.count_scannedInternalNodes_025 = percentile(internalNodesScanned, 0.25);
+        statistics.count_scannedInternalNodes_050 = percentile(internalNodesScanned, 0.50);
+        statistics.count_scannedInternalNodes_075 = percentile(internalNodesScanned, 0.75);
+        statistics.count_scannedInternalNodes_095 = percentile(internalNodesScanned, 0.95);
+        statistics.count_scannedInternalNodes_mean = mean(internalNodesScanned);
+        statistics.count_scannedInternalNodes_deviation = deviation(internalNodesScanned);
+
+        // Scanned internalNodes size
+        const internalNodesScannedSize: number[] = queryMetrics.map((x) => x.totalScannedInternalNodesSize / 1024);
+        statistics.size_scannedInternalNodes_005 = percentile(internalNodesScannedSize, 0.05);
+        statistics.size_scannedInternalNodes_025 = percentile(internalNodesScannedSize, 0.25);
+        statistics.size_scannedInternalNodes_050 = percentile(internalNodesScannedSize, 0.50);
+        statistics.size_scannedInternalNodes_075 = percentile(internalNodesScannedSize, 0.75);
+        statistics.size_scannedInternalNodes_095 = percentile(internalNodesScannedSize, 0.95);
+        statistics.size_scannedInternalNodes_mean = mean(internalNodesScannedSize);
+        statistics.size_scannedInternalNodes_deviation = deviation(internalNodesScannedSize);
+    }
+
+    // Stages
+
+    return statistics;
+}
+
+/**
+ * Calculate percentiles
+ * @param arr
+ * @param p: Value between 0 and 1
+ */
+function percentile(arr: number[], p: number) {
+    if (arr.length === 0) { return 0; }
+    arr.sort((a, b) => a - b);
+    if (p <= 0) { return arr[0]; }
+    if (p >= 1) { return arr[arr.length - 1]; }
+
+    const index = (arr.length - 1) * p;
+    const lower = Math.floor(index);
+    const upper = lower + 1;
+    const weight = index % 1;
+
+    if (upper >= arr.length) { return arr[lower]; }
+    return arr[lower] * (1 - weight) + arr[upper] * weight;
+}
+
+function mean(arr: number[]): number {
+    const sum = arr.reduce((a, b) => a + b);
+    return sum / arr.length;
+}
+
+function deviation(arr: number[]): number {
+    const avg = mean(arr);
+    const squareDiffs = arr.map((value) => Math.pow(value - avg, 2));
+    return Math.sqrt(mean(squareDiffs));
+}

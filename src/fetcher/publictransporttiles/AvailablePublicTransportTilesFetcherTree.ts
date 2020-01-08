@@ -208,7 +208,18 @@ export default class AvailablePublicTransportTilesFetcherTree implements IPublic
 
             this.tiles[node.id] = node;
             const duration = (new Date()).getTime() - beginTime.getTime();
-            EventBus.getInstance().emit(EventType.LDFetchGet, url, duration, +response.headers.get("Content-Length"));
+            if (node.children) {
+                EventBus.getInstance().emit(
+                    EventType.LDFetchGet,
+                    url,
+                    duration,
+                    +response.headers.get("Content-Length"),
+                    "internal-node",
+                );
+            } else {
+                EventBus.getInstance()
+                    .emit(EventType.LDFetchGet, url, duration, +response.headers.get("Content-Length"), "leaf");
+            }
 
             return this.tiles[node.id];
         }

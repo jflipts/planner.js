@@ -181,6 +181,7 @@ export default async (logResults: boolean) => {
             .then((queryMetrics) => {
                 metricsBaseline.push(queryMetrics);
             });
+        await waitForMs(500);
 
         // Straight line + One level
         query.tilesFetchStrategy = "straight-line";
@@ -188,6 +189,7 @@ export default async (logResults: boolean) => {
             .then((queryMetrics) => {
                 metricsStraightLineOneLevel.push(queryMetrics);
             });
+        await waitForMs(500);
 
         // Straight line + Multi level
         query.tilesFetchStrategy = "straight-line";
@@ -195,6 +197,7 @@ export default async (logResults: boolean) => {
             .then((queryMetrics) => {
                 metricsStraightLineMultiLevel.push(queryMetrics);
             });
+        await waitForMs(500);
 
         // Expanding + One level
         query.tilesFetchStrategy = "expanding";
@@ -202,6 +205,7 @@ export default async (logResults: boolean) => {
             .then((queryMetrics) => {
                 metricsExpandingOneLevel.push(queryMetrics);
             });
+        await waitForMs(500);
 
         // Tree + One level
         query.tilesFetchStrategy = "tree";
@@ -209,6 +213,7 @@ export default async (logResults: boolean) => {
             .then((queryMetrics) => {
                 metricsTreeOneLevel.push(queryMetrics);
             });
+        await waitForMs(500);
 
         // Tree + Multi level
         query.tilesFetchStrategy = "tree";
@@ -216,12 +221,13 @@ export default async (logResults: boolean) => {
             .then((queryMetrics) => {
                 metricsTreeMultiLevel.push(queryMetrics);
             });
+        await waitForMs(500);
 
         console.log("\n");
     }
 
     // wait 15 seconds to make sure everyting settled
-    await new Promise((resolve) => setTimeout(resolve, 1000 * 15));
+    await waitForMs(1000 * 15);
 
     const statsBaseline = computeStastics(metricsBaseline, "baseline", metricsBaseline);
     const statsStraightOneLevel = computeStastics(metricsStraightLineOneLevel, "straight-one-level", metricsBaseline);
@@ -603,4 +609,8 @@ function deviation(arr: number[]): number {
     const avg = mean(arr);
     const squareDiffs = arr.map((value) => Math.pow(value - avg, 2));
     return Math.sqrt(mean(squareDiffs));
+}
+
+function waitForMs(ms: number) {
+    return new Promise((resolve) => setTimeout(resolve, ms));
 }

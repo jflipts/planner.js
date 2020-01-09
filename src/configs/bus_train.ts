@@ -49,78 +49,80 @@ import LocationResolverConvenience from "../query-runner/LocationResolverConveni
 import QueryRunnerDefault from "../query-runner/QueryRunnerDefault";
 import TYPES from "../types";
 
-const container = new Container();
-container.bind<Context>(TYPES.Context).to(Context).inSingletonScope();
-container.bind<IQueryRunner>(TYPES.QueryRunner).to(QueryRunnerDefault);
-container.bind<ILocationResolver>(TYPES.LocationResolver).to(LocationResolverConvenience);
+export default function getContainer() {
+  const container = new Container();
+  container.bind<Context>(TYPES.Context).to(Context).inSingletonScope();
+  container.bind<IQueryRunner>(TYPES.QueryRunner).to(QueryRunnerDefault);
+  container.bind<ILocationResolver>(TYPES.LocationResolver).to(LocationResolverConvenience);
 
-// TODO, make this a fixed property of the planner itself
-container.bind<IJourneyExtractor>(TYPES.JourneyExtractor)
-  .to(JourneyExtractorProfile);
+  // TODO, make this a fixed property of the planner itself
+  container.bind<IJourneyExtractor>(TYPES.JourneyExtractor)
+    .to(JourneyExtractorProfile);
 
-container.bind<IPublicTransportPlanner>(TYPES.PublicTransportPlanner)
-  .to(CSAEarliestArrival);
-container.bind<interfaces.Factory<IPublicTransportPlanner>>(TYPES.PublicTransportPlannerFactory)
-  .toAutoFactory<IPublicTransportPlanner>(TYPES.PublicTransportPlanner);
+  container.bind<IPublicTransportPlanner>(TYPES.PublicTransportPlanner)
+    .to(CSAEarliestArrival);
+  container.bind<interfaces.Factory<IPublicTransportPlanner>>(TYPES.PublicTransportPlannerFactory)
+    .toAutoFactory<IPublicTransportPlanner>(TYPES.PublicTransportPlanner);
 
-container.bind<IRoadPlanner>(TYPES.RoadPlanner)
-  .to(RoadPlannerPathfinding);
+  container.bind<IRoadPlanner>(TYPES.RoadPlanner)
+    .to(RoadPlannerPathfinding);
 
-container.bind<IShortestPathTreeAlgorithm>(TYPES.ShortestPathTreeAlgorithm).to(DijkstraTree).inSingletonScope();
-container.bind<IShortestPathAlgorithm>(TYPES.ShortestPathAlgorithm).to(MixedDijkstra).inSingletonScope();
-container.bind<PathfinderProvider>(TYPES.PathfinderProvider).to(PathfinderProvider).inSingletonScope();
-container.bind<IProfileFetcher>(TYPES.ProfileFetcher).to(ProfileFetcherDefault).inSingletonScope();
-container.bind<IProfileProvider>(TYPES.ProfileProvider).to(ProfileProviderDefault).inSingletonScope();
+  container.bind<IShortestPathTreeAlgorithm>(TYPES.ShortestPathTreeAlgorithm).to(DijkstraTree).inSingletonScope();
+  container.bind<IShortestPathAlgorithm>(TYPES.ShortestPathAlgorithm).to(MixedDijkstra).inSingletonScope();
+  container.bind<PathfinderProvider>(TYPES.PathfinderProvider).to(PathfinderProvider).inSingletonScope();
+  container.bind<IProfileFetcher>(TYPES.ProfileFetcher).to(ProfileFetcherDefault).inSingletonScope();
+  container.bind<IProfileProvider>(TYPES.ProfileProvider).to(ProfileProviderDefault).inSingletonScope();
 
-container.bind<IFootpathsFetcher>(TYPES.FootpathsProvider).to(FootpathsProviderRaw).inSingletonScope();
+  container.bind<IFootpathsFetcher>(TYPES.FootpathsProvider).to(FootpathsProviderRaw).inSingletonScope();
 
-container.bind<IReachableStopsFinder>(TYPES.ReachableStopsFinder)
-  .to(ReachableStopsFinderDelaunay).whenTargetTagged("phase", ReachableStopsSearchPhase.Initial);
-container.bind<IReachableStopsFinder>(TYPES.ReachableStopsFinder)
-  .to(ReachableStopsFinderFootpaths).whenTargetTagged("phase", ReachableStopsSearchPhase.Transfer);
-container.bind<IReachableStopsFinder>(TYPES.ReachableStopsFinder)
-  .to(ReachableStopsFinderDelaunay).whenTargetTagged("phase", ReachableStopsSearchPhase.Final);
+  container.bind<IReachableStopsFinder>(TYPES.ReachableStopsFinder)
+    .to(ReachableStopsFinderDelaunay).whenTargetTagged("phase", ReachableStopsSearchPhase.Initial);
+  container.bind<IReachableStopsFinder>(TYPES.ReachableStopsFinder)
+    .to(ReachableStopsFinderFootpaths).whenTargetTagged("phase", ReachableStopsSearchPhase.Transfer);
+  container.bind<IReachableStopsFinder>(TYPES.ReachableStopsFinder)
+    .to(ReachableStopsFinderDelaunay).whenTargetTagged("phase", ReachableStopsSearchPhase.Final);
 
-container.bind<IConnectionsProvider>(TYPES.ConnectionsProvider).to(ConnectionsProviderMerge).inSingletonScope();
-container.bind<IConnectionsFetcher>(TYPES.ConnectionsFetcher).to(ConnectionsFetcherRaw);
-container.bind<interfaces.Factory<IConnectionsFetcher>>(TYPES.ConnectionsFetcherFactory)
-  .toFactory<IConnectionsFetcher>(
-    (context: interfaces.Context) =>
-      (travelMode: TravelMode) => {
-        const fetcher = context.container.get<IConnectionsFetcher>(TYPES.ConnectionsFetcher);
+  container.bind<IConnectionsProvider>(TYPES.ConnectionsProvider).to(ConnectionsProviderMerge).inSingletonScope();
+  container.bind<IConnectionsFetcher>(TYPES.ConnectionsFetcher).to(ConnectionsFetcherRaw);
+  container.bind<interfaces.Factory<IConnectionsFetcher>>(TYPES.ConnectionsFetcherFactory)
+    .toFactory<IConnectionsFetcher>(
+      (context: interfaces.Context) =>
+        (travelMode: TravelMode) => {
+          const fetcher = context.container.get<IConnectionsFetcher>(TYPES.ConnectionsFetcher);
 
-        fetcher.setTravelMode(travelMode);
+          fetcher.setTravelMode(travelMode);
 
-        return fetcher;
-      },
-  );
+          return fetcher;
+        },
+    );
 
-container.bind<IStopsProvider>(TYPES.StopsProvider).to(StopsProviderDefault).inSingletonScope();
-container.bind<IStopsFetcher>(TYPES.StopsFetcher).to(StopsFetcherRaw);
-container.bind<interfaces.Factory<IStopsFetcher>>(TYPES.StopsFetcherFactory)
-  .toFactory<IStopsFetcher>(
-    (context: interfaces.Context) =>
-      (accessUrl: string) => {
-        const fetcher = context.container.get<StopsFetcherRaw>(TYPES.StopsFetcher);
-        fetcher.setAccessUrl(accessUrl);
-        return fetcher;
-      },
-  );
+  container.bind<IStopsProvider>(TYPES.StopsProvider).to(StopsProviderDefault).inSingletonScope();
+  container.bind<IStopsFetcher>(TYPES.StopsFetcher).to(StopsFetcherRaw);
+  container.bind<interfaces.Factory<IStopsFetcher>>(TYPES.StopsFetcherFactory)
+    .toFactory<IStopsFetcher>(
+      (context: interfaces.Context) =>
+        (accessUrl: string) => {
+          const fetcher = context.container.get<StopsFetcherRaw>(TYPES.StopsFetcher);
+          fetcher.setAccessUrl(accessUrl);
+          return fetcher;
+        },
+    );
 
-container.bind<RoutableTileRegistry>(TYPES.RoutableTileRegistry).to(RoutableTileRegistry).inSingletonScope();
-container.bind<IRoutableTileFetcher>(TYPES.RoutableTileFetcher).to(RoutableTileFetcherRaw).inSingletonScope();
-container.bind<IRoutableTileProvider>(TYPES.RoutableTileProvider)
-  .to(RoutableTileProviderDefault).inSingletonScope().whenTargetTagged("phase", RoutingPhase.Base);
-container.bind<IRoutableTileProvider>(TYPES.RoutableTileProvider)
-  .to(RoutableTileProviderTransit).inSingletonScope().whenTargetTagged("phase", RoutingPhase.Transit);
+  container.bind<RoutableTileRegistry>(TYPES.RoutableTileRegistry).to(RoutableTileRegistry).inSingletonScope();
+  container.bind<IRoutableTileFetcher>(TYPES.RoutableTileFetcher).to(RoutableTileFetcherRaw).inSingletonScope();
+  container.bind<IRoutableTileProvider>(TYPES.RoutableTileProvider)
+    .to(RoutableTileProviderDefault).inSingletonScope().whenTargetTagged("phase", RoutingPhase.Base);
+  container.bind<IRoutableTileProvider>(TYPES.RoutableTileProvider)
+    .to(RoutableTileProviderTransit).inSingletonScope().whenTargetTagged("phase", RoutingPhase.Transit);
 
-// Bind catalog
-const combined = Catalog.combine(catalogNmbs);
-container.bind<Catalog>(TYPES.Catalog).toConstantValue(combined);
+  // Bind catalog
+  const combined = Catalog.combine(catalogNmbs);
+  container.bind<Catalog>(TYPES.Catalog).toConstantValue(combined);
 
-// Init LDFetch
-container.bind<LDFetch>(TYPES.LDFetch).to(LDFetch).inSingletonScope();
+  // Init LDFetch
+  container.bind<LDFetch>(TYPES.LDFetch).to(LDFetch).inSingletonScope();
 
-container.bind<LDLoader>(TYPES.LDLoader).to(LDLoader);
+  container.bind<LDLoader>(TYPES.LDLoader).to(LDLoader);
 
-export default container;
+  return container;
+}

@@ -170,6 +170,8 @@ export default class AvailablePublicTransportTilesFetcherTree implements IPublic
             };
 
             if (blob["tree:relation"]) {
+                EventBus.getInstance().emit(EventType.FetchInternalNode, node);
+
                 node.children = [];
                 node.unprocessedChildren = [];
 

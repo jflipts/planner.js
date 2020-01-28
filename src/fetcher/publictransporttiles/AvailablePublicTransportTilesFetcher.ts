@@ -87,6 +87,7 @@ export default class AvailablePublicTransportTilesFetcher implements IPublicTran
                 };
                 tiles[id] = tile;
             }
+            EventBus.getInstance().emit(EventType.AvailableTiles, Object.values(tiles));
         }
 
         const duration = (new Date()).getTime() - beginTime.getTime();

@@ -164,6 +164,8 @@ export default class CSAEarliestArrivalTiled implements IPublicTransportPlanner 
 
     if (tilesToFetch && !this.tilesToFetchIterator.closed) {
 
+      this.eventBus.emit(EventType.TilesToFetch, tilesToFetch);
+
       // For each tile create a catalog and for each catalog a ConnectionProvider
       const tileIterators = [];
       tilesToFetch.forEach((value: IPublicTransportTile, _1, _2) => {

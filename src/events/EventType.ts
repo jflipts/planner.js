@@ -23,6 +23,10 @@ enum EventType {
 
   ReachableStop = "ReachableStop",
   ReachableTile = "ReachableTile",
+
+  TilesToFetch = "tiles-to-fetch",
+  FetchInternalNode = "fetch-internal-node",
+  AvailableTiles = "available-tiles",
 }
 
 export default EventType;

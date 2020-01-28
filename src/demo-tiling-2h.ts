@@ -53,40 +53,40 @@ export default async (logResults: boolean) => {
     // One level
     const catalogNmbsTiledOneLevel = new Catalog();
     catalogNmbsTiledOneLevel.addStopsSource("https://irail.be/stations/NMBS");
-    catalogNmbsTiledOneLevel.addConnectionsSource("http://localhost:3000/nmbs-tiled-onelevel/connections/12/{x}/{y}",
+    catalogNmbsTiledOneLevel.addConnectionsSource("http://localhost:3000/nmbs-tiled-onelevel-2h/connections/12/{x}/{y}",
         TravelMode.Train);
     catalogNmbsTiledOneLevel
-        .addAvailablePublicTransportTilesSource("http://localhost:3000/nmbs-tiled-onelevel/tiles", 12);
+        .addAvailablePublicTransportTilesSource("http://localhost:3000/nmbs-tiled-onelevel-2h/tiles", 12);
 
     const plannerTiledOnelevel = new CustomPlanner(catalogNmbsTiledOneLevel);
 
     // Multi level
     const catalogNmbsTiledMultiLevel = new Catalog();
     catalogNmbsTiledMultiLevel.addStopsSource("https://irail.be/stations/NMBS");
-    catalogNmbsTiledMultiLevel.addConnectionsSource("http://localhost:3000/nmbs-tiled-multilevel/connections/{zoom}/{x}/{y}",
+    catalogNmbsTiledMultiLevel.addConnectionsSource("http://localhost:3000/nmbs-tiled-multilevel-2h/connections/{zoom}/{x}/{y}",
         TravelMode.Train);
     catalogNmbsTiledMultiLevel
-        .addAvailablePublicTransportTilesSource("http://localhost:3000/nmbs-tiled-multilevel/tiles");
+        .addAvailablePublicTransportTilesSource("http://localhost:3000/nmbs-tiled-multilevel-2h/tiles");
 
     const plannerTiledMultilevel = new CustomPlanner(catalogNmbsTiledMultiLevel);
 
     // One level tree
     const catalogNmbsTiledOneLevelTree = new Catalog();
     catalogNmbsTiledOneLevelTree.addStopsSource("https://irail.be/stations/NMBS");
-    catalogNmbsTiledOneLevelTree.addConnectionsSource("http://localhost:3000/nmbs-tiled-onelevel-tree/connections/{zoom}/{x}/{y}",
+    catalogNmbsTiledOneLevelTree.addConnectionsSource("http://localhost:3000/nmbs-tiled-onelevel-tree-2h/connections/{zoom}/{x}/{y}",
         TravelMode.Train);
     catalogNmbsTiledOneLevelTree
-        .addAvailablePublicTransportTilesSource("http://localhost:3000/nmbs-tiled-onelevel-tree/connections");
+        .addAvailablePublicTransportTilesSource("http://localhost:3000/nmbs-tiled-onelevel-tree-2h/connections");
 
     const plannerTiledOnelevelTree = new CustomPlanner(catalogNmbsTiledOneLevelTree, profile_tree);
 
     // Multi level tree
     const catalogNmbsTiledMultiLevelTree = new Catalog();
     catalogNmbsTiledMultiLevelTree.addStopsSource("https://irail.be/stations/NMBS");
-    catalogNmbsTiledMultiLevelTree.addConnectionsSource("http://localhost:3000/nmbs-tiled-multilevel-tree/connections/{zoom}/{x}/{y}",
+    catalogNmbsTiledMultiLevelTree.addConnectionsSource("http://localhost:3000/nmbs-tiled-multilevel-tree-2h/connections/{zoom}/{x}/{y}",
         TravelMode.Train);
     catalogNmbsTiledMultiLevelTree
-        .addAvailablePublicTransportTilesSource("http://localhost:3000/nmbs-tiled-multilevel-tree/connections");
+        .addAvailablePublicTransportTilesSource("http://localhost:3000/nmbs-tiled-multilevel-tree-2h/connections");
 
     const plannerTiledMultilevelTree = new CustomPlanner(catalogNmbsTiledMultiLevelTree, profile_tree);
 
@@ -183,13 +183,13 @@ export default async (logResults: boolean) => {
             });
         await waitForMs(500);
 
-        // Straight line + One level
-        query.tilesFetchStrategy = "straight-line";
-        await executeQuery(new CustomPlanner(catalogNmbsTiledOneLevel), query)
-            .then((queryMetrics) => {
-                metricsStraightLineOneLevel.push(queryMetrics);
-            });
-        await waitForMs(500);
+        // // Straight line + One level
+        // query.tilesFetchStrategy = "straight-line";
+        // await executeQuery(new CustomPlanner(catalogNmbsTiledOneLevel), query)
+        //     .then((queryMetrics) => {
+        //         metricsStraightLineOneLevel.push(queryMetrics);
+        //     });
+        // await waitForMs(500);
 
         // Straight line + Multi level
         query.tilesFetchStrategy = "straight-line";
@@ -199,21 +199,21 @@ export default async (logResults: boolean) => {
             });
         await waitForMs(500);
 
-        // Expanding + One level
-        query.tilesFetchStrategy = "expanding";
-        await executeQuery(new CustomPlanner(catalogNmbsTiledOneLevel), query)
-            .then((queryMetrics) => {
-                metricsExpandingOneLevel.push(queryMetrics);
-            });
-        await waitForMs(500);
+        // // Expanding + One level
+        // query.tilesFetchStrategy = "expanding";
+        // await executeQuery(new CustomPlanner(catalogNmbsTiledOneLevel), query)
+        //     .then((queryMetrics) => {
+        //         metricsExpandingOneLevel.push(queryMetrics);
+        //     });
+        // await waitForMs(500);
 
-        // Tree + One level
-        query.tilesFetchStrategy = "tree";
-        await executeQuery(new CustomPlanner(catalogNmbsTiledOneLevelTree, profile_tree), query)
-            .then((queryMetrics) => {
-                metricsTreeOneLevel.push(queryMetrics);
-            });
-        await waitForMs(500);
+        // // Tree + One level
+        // query.tilesFetchStrategy = "tree";
+        // await executeQuery(new CustomPlanner(catalogNmbsTiledOneLevelTree, profile_tree), query)
+        //     .then((queryMetrics) => {
+        //         metricsTreeOneLevel.push(queryMetrics);
+        //     });
+        // await waitForMs(500);
 
         // Tree + Multi level
         query.tilesFetchStrategy = "tree";
@@ -230,19 +230,20 @@ export default async (logResults: boolean) => {
     await waitForMs(1000 * 15);
 
     const statsBaseline = computeStastics(metricsBaseline, "baseline", metricsBaseline);
-    const statsStraightOneLevel = computeStastics(metricsStraightLineOneLevel, "straight-one-level", metricsBaseline);
+    // const statsStraightOneLevel
+        // += computeStastics(metricsStraightLineOneLevel, "straight-one-level", metricsBaseline);
     const statsStraightMultiLevel
         = computeStastics(metricsStraightLineMultiLevel, "straight-multi-level", metricsBaseline);
-    const statsExpandingOneLevel = computeStastics(metricsExpandingOneLevel, "expanding-one-level", metricsBaseline);
-    const statsTreeOneLevel = computeStastics(metricsTreeOneLevel, "tree-one-level", metricsBaseline);
+    // const statsExpandingOneLevel = computeStastics(metricsExpandingOneLevel, "expanding-one-level", metricsBaseline);
+    // const statsTreeOneLevel = computeStastics(metricsTreeOneLevel, "tree-one-level", metricsBaseline);
     const statsTreeMultiLevel = computeStastics(metricsTreeMultiLevel, "tree-multi-level", metricsBaseline);
 
     const csv = new ObjectsToCSV([
         statsBaseline,
-        statsStraightOneLevel,
+        // statsStraightOneLevel,
         statsStraightMultiLevel,
-        statsExpandingOneLevel,
-        statsTreeOneLevel,
+        // statsExpandingOneLevel,
+        // statsTreeOneLevel,
         statsTreeMultiLevel,
     ]);
 
